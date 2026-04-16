@@ -1,0 +1,11 @@
+campo,definicao,parametros
+wet_days,dias com pr >= T (mm/dia),T=freq-thr-mm (default 20 mm/dia)
+sdii,média de pr apenas nos dias com pr >= T,T=freq-thr-mm (default 20 mm/dia)
+rx1day,máxima precipitação diária no ano,mm
+rx5day,máxima soma em qualquer janela móvel de 5 dias,mm em 5 dias
+r20mm,nº de dias com pr >= 20.0 mm,limiar=20.0 mm
+r50mm,nº de dias com pr >= 50.0 mm,limiar=50.0 mm
+r95ptot_mm,soma de pr acima do P95 do baseline,baseline=2026-2030; p95_wet_thr=1.0 mm/dia
+r95ptot_frac,r95ptot_mm / soma anual,adimensional
+scenario,inferido do nome do arquivo ou atributos,-
+variable,'pr' (precipitação diária),convertida p/ mm/dia
