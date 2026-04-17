@@ -4,6 +4,7 @@ As portas são contratos que a camada ``application`` usa e a camada
 ``infrastructure`` implementa. Definidas como ``typing.Protocol``.
 """
 
+from climate_risk.domain.portas.fila_jobs import FilaJobs
 from climate_risk.domain.portas.leitor_netcdf import LeitorNetCDF
 from climate_risk.domain.portas.repositorios import (
     RepositorioExecucoes,
@@ -14,6 +15,7 @@ from climate_risk.domain.portas.repositorios import (
 )
 
 __all__ = [
+    "FilaJobs",
     "LeitorNetCDF",
     "RepositorioExecucoes",
     "RepositorioFornecedores",
