@@ -10,7 +10,10 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+# Importa os modelos para que o metadata conheça todas as tabelas.
+import climate_risk.infrastructure.db.modelos  # noqa: F401
 from climate_risk.core.config import get_settings
+from climate_risk.infrastructure.db.base import Base
 
 config = context.config
 
@@ -21,7 +24,7 @@ if config.config_file_name is not None:
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
-target_metadata = None  # Slices futuros anexarão Base.metadata aqui.
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
