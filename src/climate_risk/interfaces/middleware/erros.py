@@ -17,6 +17,8 @@ from climate_risk.domain.excecoes import (
     ErroDimensaoTempoAusente,
     ErroDominio,
     ErroEntidadeNaoEncontrada,
+    ErroJobEstadoInvalido,
+    ErroJobNaoEncontrado,
     ErroLeituraNetCDF,
     ErroLimitePontosSincrono,
     ErroVariavelAusente,
@@ -59,6 +61,14 @@ _MAPEAMENTO: tuple[tuple[type[Exception], _MapaErro], ...] = (
     (
         ErroLeituraNetCDF,
         _MapaErro(500, "Falha ao ler arquivo NetCDF", "leitura-netcdf"),
+    ),
+    (
+        ErroJobNaoEncontrado,
+        _MapaErro(404, "Job não encontrado", "job-nao-encontrado"),
+    ),
+    (
+        ErroJobEstadoInvalido,
+        _MapaErro(409, "Estado do job não permite a transição", "job-estado-invalido"),
     ),
     (
         ErroEntidadeNaoEncontrada,

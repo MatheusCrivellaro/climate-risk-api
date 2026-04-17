@@ -128,3 +128,39 @@ class ErroLimitePontosSincrono(ErroDominio):
             f"Total de pontos ({total}) excede o limite síncrono ({maximo}). "
             "Use processamento assíncrono para volumes maiores."
         )
+
+
+class ErroJobNaoEncontrado(ErroDominio):
+    """Tentativa de operar em um :class:`Job` inexistente.
+
+    Levantada por casos de uso (consulta, reprocessamento) ao traduzir um
+    ``job_id`` recebido externamente. Na camada HTTP o middleware converte
+    para ``404``.
+
+    Args:
+        job_id: Identificador do job procurado.
+    """
+
+    def __init__(self, job_id: str) -> None:
+        self.job_id = job_id
+        super().__init__(f"Job '{job_id}' não encontrado.")
+
+
+class ErroJobEstadoInvalido(ErroDominio):
+    """Transição de estado não permitida para um :class:`Job`.
+
+    Exemplos: reprocessar um job que ainda está ``pending`` (apenas
+    ``failed`` é elegível); cancelar um job que já está ``completed``.
+
+    Args:
+        job_id: Identificador do job.
+        estado_atual: Status atual, um dos valores de :class:`StatusJob`.
+        transicao: Nome legível da transição solicitada (ex.: ``"retry"``,
+            ``"cancelar"``).
+    """
+
+    def __init__(self, job_id: str, estado_atual: str, transicao: str) -> None:
+        self.job_id = job_id
+        self.estado_atual = estado_atual
+        self.transicao = transicao
+        super().__init__(f"Job '{job_id}' em estado '{estado_atual}' não permite '{transicao}'.")

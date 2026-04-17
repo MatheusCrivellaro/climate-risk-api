@@ -13,10 +13,13 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from climate_risk.application.calculos.calcular_por_pontos import CalcularIndicesPorPontos
+from climate_risk.application.jobs.consultar import ConsultarJobs
+from climate_risk.application.jobs.reprocessar import ReprocessarJob
 from climate_risk.core.config import Settings, get_settings
 from climate_risk.infrastructure.db.repositorios.execucoes import (
     SQLAlchemyRepositorioExecucoes,
 )
+from climate_risk.infrastructure.db.repositorios.jobs import SQLAlchemyRepositorioJobs
 from climate_risk.infrastructure.db.repositorios.resultados import (
     SQLAlchemyRepositorioResultados,
 )
@@ -51,11 +54,17 @@ def obter_repositorio_resultados(sessao: SessaoDep) -> SQLAlchemyRepositorioResu
     return SQLAlchemyRepositorioResultados(sessao)
 
 
+def obter_repositorio_jobs(sessao: SessaoDep) -> SQLAlchemyRepositorioJobs:
+    """Repositório CRUD de jobs ligado à sessão da request."""
+    return SQLAlchemyRepositorioJobs(sessao)
+
+
 LeitorNetCDFDep = Annotated[LeitorXarray, Depends(obter_leitor_netcdf)]
 RepoExecucoesDep = Annotated[SQLAlchemyRepositorioExecucoes, Depends(obter_repositorio_execucoes)]
 RepoResultadosDep = Annotated[
     SQLAlchemyRepositorioResultados, Depends(obter_repositorio_resultados)
 ]
+RepoJobsDep = Annotated[SQLAlchemyRepositorioJobs, Depends(obter_repositorio_jobs)]
 
 
 def obter_caso_uso_calcular_por_pontos(
@@ -69,3 +78,13 @@ def obter_caso_uso_calcular_por_pontos(
         repositorio_execucoes=repo_execucoes,
         repositorio_resultados=repo_resultados,
     )
+
+
+def obter_consultar_jobs(repo_jobs: RepoJobsDep) -> ConsultarJobs:
+    """Compõe :class:`ConsultarJobs` sobre o repositório CRUD."""
+    return ConsultarJobs(repositorio=repo_jobs)
+
+
+def obter_reprocessar_job(repo_jobs: RepoJobsDep) -> ReprocessarJob:
+    """Compõe :class:`ReprocessarJob` sobre o repositório CRUD."""
+    return ReprocessarJob(repositorio=repo_jobs)
