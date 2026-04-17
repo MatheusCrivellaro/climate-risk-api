@@ -8,7 +8,7 @@ from climate_risk.core.config import get_settings
 from climate_risk.core.logging import configure_logging
 from climate_risk.interfaces.middleware.correlation_id import CorrelationIdMiddleware
 from climate_risk.interfaces.middleware.erros import ErroRfc7807Middleware
-from climate_risk.interfaces.rotas import health
+from climate_risk.interfaces.rotas import calculos, health
 
 VERSAO_API = "0.0.1"
 
@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
 
     app.include_router(health.router)
+    app.include_router(calculos.router)
 
     return app
 
