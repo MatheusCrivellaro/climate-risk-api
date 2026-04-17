@@ -23,3 +23,29 @@ class ErroRfc7807(BaseModel):
     detail: str | None = None
     instance: str | None = None
     correlation_id: str | None = None
+
+
+class ProblemDetails(BaseModel):
+    """Alias público e mais verboso de :class:`ErroRfc7807`.
+
+    Usado nas declarações ``responses={...}`` dos endpoints para que o
+    OpenAPI exponha o formato RFC 7807 nas respostas de erro (``4xx``/
+    ``5xx``). Mantemos ambos os nomes: ``ErroRfc7807`` é o identificador
+    interno e ``ProblemDetails`` é a exposição pública no schema.
+    """
+
+    type: str = Field(
+        default="about:blank",
+        description="URI que identifica o tipo de problema.",
+    )
+    title: str = Field(..., description="Resumo legível do problema.")
+    status: int = Field(..., description="Código HTTP associado.")
+    detail: str | None = Field(
+        default=None, description="Explicação específica para esta ocorrência."
+    )
+    instance: str | None = Field(
+        default=None, description="URI da ocorrência (normalmente ``request.url.path``)."
+    )
+    correlation_id: str | None = Field(
+        default=None, description="Identificador propagado no header ``X-Correlation-ID``."
+    )

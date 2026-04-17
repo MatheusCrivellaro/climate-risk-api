@@ -105,3 +105,26 @@ class ErroCoordenadasLatLonAusentes(ErroLeituraNetCDF):
     combinado com ``lon``/``longitude``/``x``) aparece em ``coords`` ou
     ``variables`` do dataset.
     """
+
+
+class ErroLimitePontosSincrono(ErroDominio):
+    """Requisição síncrona por pontos excede o limite configurado.
+
+    UC-03 aceita até ``settings.sincrono_pontos_max`` pontos no caminho
+    síncrono (``POST /calculos/pontos``). Acima desse limite, a API deve
+    rejeitar com 400 — e, a partir do Slice 7, devolver 202 enfileirando
+    um job.
+
+    Args:
+        total: Quantidade de pontos recebidos na requisição.
+        maximo: Limite síncrono permitido (valor de
+            ``settings.sincrono_pontos_max``).
+    """
+
+    def __init__(self, total: int, maximo: int) -> None:
+        self.total = total
+        self.maximo = maximo
+        super().__init__(
+            f"Total de pontos ({total}) excede o limite síncrono ({maximo}). "
+            "Use processamento assíncrono para volumes maiores."
+        )
