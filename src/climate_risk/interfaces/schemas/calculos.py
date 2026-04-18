@@ -139,3 +139,23 @@ class CalculoPorPontosResponse(BaseModel):
         ..., ge=0, description="Quantidade de linhas ``(ponto, ano)`` retornadas."
     )
     resultados: list[PontoResultado]
+
+
+class CalculoPontosAsyncResponse(BaseModel):
+    """Corpo do ``202 Accepted`` quando o lote excede o limite síncrono.
+
+    Quando ``len(pontos) > settings.sincrono_pontos_max``, a rota enfileira
+    um :class:`Job` do tipo ``calcular_pontos`` e devolve esta resposta.
+    O cliente deve acompanhar o progresso via ``GET /execucoes/{id}`` ou
+    ``GET /jobs/{id}``.
+    """
+
+    execucao_id: str = Field(..., description="ID da Execucao criada em ``pending``.")
+    job_id: str = Field(..., description="ID do Job enfileirado para processamento.")
+    status: str = Field(..., description="Status inicial da execução (``pending``).")
+    total_pontos: int = Field(..., ge=0, description="Total de pontos no lote.")
+    criado_em: str = Field(..., description="Timestamp ISO 8601 (UTC) da criação.")
+    links: dict[str, str] = Field(
+        ...,
+        description="Hyperlinks navegáveis (``self`` para execução, ``job`` para o job).",
+    )

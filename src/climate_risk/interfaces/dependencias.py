@@ -13,6 +13,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from climate_risk.application.calculos.calcular_por_pontos import CalcularIndicesPorPontos
+from climate_risk.application.calculos.criar_execucao_por_pontos import CriarExecucaoPorPontos
 from climate_risk.application.execucoes.cancelar import CancelarExecucao
 from climate_risk.application.execucoes.consultar import ConsultarExecucoes
 from climate_risk.application.execucoes.criar import CriarExecucaoCordex
@@ -96,6 +97,14 @@ def obter_caso_uso_criar_execucao(
 ) -> CriarExecucaoCordex:
     """Compõe :class:`CriarExecucaoCordex` com repositório + fila."""
     return CriarExecucaoCordex(repositorio_execucoes=repo_execucoes, fila_jobs=fila)
+
+
+def obter_caso_uso_criar_execucao_por_pontos(
+    repo_execucoes: RepoExecucoesDep,
+    fila: FilaJobsDep,
+) -> CriarExecucaoPorPontos:
+    """Compõe :class:`CriarExecucaoPorPontos` (UC-03 assíncrono — Slice 7)."""
+    return CriarExecucaoPorPontos(repositorio_execucoes=repo_execucoes, fila_jobs=fila)
 
 
 def obter_consultar_execucoes(repo_execucoes: RepoExecucoesDep) -> ConsultarExecucoes:

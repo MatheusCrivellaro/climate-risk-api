@@ -12,14 +12,11 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from climate_risk.core.config import get_settings
 from climate_risk.infrastructure.db.modelos import ExecucaoORM, ResultadoIndiceORM
-from climate_risk.interfaces.app import create_app
-from climate_risk.interfaces.dependencias import obter_settings
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "netcdf_mini"
 FIXTURE_NC = FIXTURES / "cordex_sintetico_basico.nc"
@@ -120,31 +117,11 @@ async def test_persiste_execucao_e_resultados_no_banco(
         }
 
 
-@pytest.mark.asyncio
-async def test_excede_limite_sincrono_retorna_400() -> None:
-    # Usamos um app com override de settings para baixar o limite a 2.
-    app = create_app()
-
-    def _settings_com_limite_pequeno() -> object:
-        settings = get_settings()
-        object.__setattr__(settings, "sincrono_pontos_max", 2)
-        return settings
-
-    app.dependency_overrides[obter_settings] = _settings_com_limite_pequeno
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as cliente:
-        pontos = [{"lat": -22.9, "lon": -46.5, "identificador": f"P{i}"} for i in range(5)]
-        resposta = await cliente.post("/calculos/pontos", json=_corpo_basico(pontos=pontos))
-
-    assert resposta.status_code == 400
-    corpo = resposta.json()
-    assert corpo["type"].endswith("/limite-pontos-sincrono")
-    assert corpo["status"] == 400
-    assert "5" in corpo["detail"]
-    assert "2" in corpo["detail"]
-
-    get_settings.cache_clear()  # restaura estado para outros testes
+# NOTA: o teste ``test_excede_limite_sincrono_retorna_400`` (Slice 4) foi
+# removido. A partir do Slice 7, lotes acima de ``sincrono_pontos_max``
+# deixaram de retornar 400 e passaram a devolver 202 enfileirando um job.
+# A cobertura do novo comportamento vive em
+# ``tests/e2e/api/test_calculos_pontos_async.py``.
 
 
 @pytest.mark.asyncio

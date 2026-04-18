@@ -18,9 +18,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from climate_risk.application.calculos.processar_pontos_lote import ProcessarPontosLote
 from climate_risk.application.execucoes.processar_cenario import ProcessarCenarioCordex
 from climate_risk.application.jobs.handlers_cordex import criar_handler_processar_cordex
 from climate_risk.application.jobs.handlers_noop import handler_noop
+from climate_risk.application.jobs.handlers_pontos import criar_handler_calcular_pontos
 from climate_risk.core.config import get_settings
 from climate_risk.core.logging import configure_logging
 from climate_risk.infrastructure.db.engine import criar_engine, criar_sessionmaker
@@ -65,6 +67,27 @@ def _criar_handler_cordex_com_sessao(
     return _handler
 
 
+def _criar_handler_pontos_com_sessao(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> Handler:
+    """Mesma estratégia do handler CORDEX, aplicada ao lote de pontos (Slice 7)."""
+    leitor = LeitorXarray()
+
+    async def _handler(payload: dict[str, Any]) -> None:
+        async with sessionmaker() as sessao:
+            repo_execucoes = SQLAlchemyRepositorioExecucoes(sessao)
+            repo_resultados = SQLAlchemyRepositorioResultados(sessao)
+            caso_uso = ProcessarPontosLote(
+                leitor_netcdf=leitor,
+                repositorio_execucoes=repo_execucoes,
+                repositorio_resultados=repo_resultados,
+            )
+            executor = criar_handler_calcular_pontos(caso_uso)
+            await executor(payload)
+
+    return _handler
+
+
 async def _rodar_worker() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -76,6 +99,7 @@ async def _rodar_worker() -> None:
     handlers: dict[str, Handler] = {
         "noop": handler_noop,
         "processar_cordex": _criar_handler_cordex_com_sessao(sessionmaker),
+        "calcular_pontos": _criar_handler_pontos_com_sessao(sessionmaker),
     }
 
     try:
