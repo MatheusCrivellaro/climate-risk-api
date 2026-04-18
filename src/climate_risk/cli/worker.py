@@ -14,15 +14,55 @@ import asyncio
 import contextlib
 import logging
 import sys
+from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from climate_risk.application.execucoes.processar_cenario import ProcessarCenarioCordex
+from climate_risk.application.jobs.handlers_cordex import criar_handler_processar_cordex
 from climate_risk.application.jobs.handlers_noop import handler_noop
 from climate_risk.core.config import get_settings
 from climate_risk.core.logging import configure_logging
 from climate_risk.infrastructure.db.engine import criar_engine, criar_sessionmaker
+from climate_risk.infrastructure.db.repositorios.execucoes import (
+    SQLAlchemyRepositorioExecucoes,
+)
+from climate_risk.infrastructure.db.repositorios.resultados import (
+    SQLAlchemyRepositorioResultados,
+)
 from climate_risk.infrastructure.fila.fila_sqlite import FilaSQLite
 from climate_risk.infrastructure.fila.worker import Handler, Worker
+from climate_risk.infrastructure.netcdf.leitor_xarray import LeitorXarray
 
 logger = logging.getLogger(__name__)
+
+
+def _criar_handler_cordex_com_sessao(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> Handler:
+    """Closure que abre uma sessão nova para cada invocação do handler.
+
+    A fila (``FilaSQLite``) usa a sessão do loop do worker para
+    ``adquirir_proximo``/``atualizar_heartbeat``. O handler, por sua vez,
+    roda em paralelo à task de heartbeat — compartilhar sessão entre
+    coroutines concorrentes no SQLAlchemy async é não-seguro. Cada job
+    abre uma sessão própria e a fecha ao final.
+    """
+    leitor = LeitorXarray()
+
+    async def _handler(payload: dict[str, Any]) -> None:
+        async with sessionmaker() as sessao:
+            repo_execucoes = SQLAlchemyRepositorioExecucoes(sessao)
+            repo_resultados = SQLAlchemyRepositorioResultados(sessao)
+            caso_uso = ProcessarCenarioCordex(
+                leitor_netcdf=leitor,
+                repositorio_execucoes=repo_execucoes,
+                repositorio_resultados=repo_resultados,
+            )
+            executor = criar_handler_processar_cordex(caso_uso)
+            await executor(payload)
+
+    return _handler
 
 
 async def _rodar_worker() -> None:
@@ -35,7 +75,7 @@ async def _rodar_worker() -> None:
 
     handlers: dict[str, Handler] = {
         "noop": handler_noop,
-        # Slice 6 adicionará "processar_cordex": handler_processar_cordex.
+        "processar_cordex": _criar_handler_cordex_com_sessao(sessionmaker),
     }
 
     try:

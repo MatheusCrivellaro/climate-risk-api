@@ -13,6 +13,9 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from climate_risk.application.calculos.calcular_por_pontos import CalcularIndicesPorPontos
+from climate_risk.application.execucoes.cancelar import CancelarExecucao
+from climate_risk.application.execucoes.consultar import ConsultarExecucoes
+from climate_risk.application.execucoes.criar import CriarExecucaoCordex
 from climate_risk.application.jobs.consultar import ConsultarJobs
 from climate_risk.application.jobs.reprocessar import ReprocessarJob
 from climate_risk.core.config import Settings, get_settings
@@ -24,6 +27,7 @@ from climate_risk.infrastructure.db.repositorios.resultados import (
     SQLAlchemyRepositorioResultados,
 )
 from climate_risk.infrastructure.db.sessao import get_sessao
+from climate_risk.infrastructure.fila.fila_sqlite import FilaSQLite
 from climate_risk.infrastructure.netcdf.leitor_xarray import LeitorXarray
 
 
@@ -59,12 +63,18 @@ def obter_repositorio_jobs(sessao: SessaoDep) -> SQLAlchemyRepositorioJobs:
     return SQLAlchemyRepositorioJobs(sessao)
 
 
+def obter_fila_jobs(sessao: SessaoDep) -> FilaSQLite:
+    """Fila de jobs ligada à sessão da request."""
+    return FilaSQLite(sessao)
+
+
 LeitorNetCDFDep = Annotated[LeitorXarray, Depends(obter_leitor_netcdf)]
 RepoExecucoesDep = Annotated[SQLAlchemyRepositorioExecucoes, Depends(obter_repositorio_execucoes)]
 RepoResultadosDep = Annotated[
     SQLAlchemyRepositorioResultados, Depends(obter_repositorio_resultados)
 ]
 RepoJobsDep = Annotated[SQLAlchemyRepositorioJobs, Depends(obter_repositorio_jobs)]
+FilaJobsDep = Annotated[FilaSQLite, Depends(obter_fila_jobs)]
 
 
 def obter_caso_uso_calcular_por_pontos(
@@ -78,6 +88,27 @@ def obter_caso_uso_calcular_por_pontos(
         repositorio_execucoes=repo_execucoes,
         repositorio_resultados=repo_resultados,
     )
+
+
+def obter_caso_uso_criar_execucao(
+    repo_execucoes: RepoExecucoesDep,
+    fila: FilaJobsDep,
+) -> CriarExecucaoCordex:
+    """Compõe :class:`CriarExecucaoCordex` com repositório + fila."""
+    return CriarExecucaoCordex(repositorio_execucoes=repo_execucoes, fila_jobs=fila)
+
+
+def obter_consultar_execucoes(repo_execucoes: RepoExecucoesDep) -> ConsultarExecucoes:
+    """Compõe :class:`ConsultarExecucoes` sobre o repositório."""
+    return ConsultarExecucoes(repositorio=repo_execucoes)
+
+
+def obter_caso_uso_cancelar_execucao(
+    repo_execucoes: RepoExecucoesDep,
+    fila: FilaJobsDep,
+) -> CancelarExecucao:
+    """Compõe :class:`CancelarExecucao` — cancela execução + job vinculado."""
+    return CancelarExecucao(repositorio_execucoes=repo_execucoes, fila_jobs=fila)
 
 
 def obter_consultar_jobs(repo_jobs: RepoJobsDep) -> ConsultarJobs:
