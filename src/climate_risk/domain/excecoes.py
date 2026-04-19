@@ -183,6 +183,22 @@ class ErroConfiguracao(ErroDominio):
         super().__init__(mensagem)
 
 
+class ErroFormatoInvalido(ErroDominio):
+    """Arquivo em formato não suportado (esperado CSV ou XLSX).
+
+    Levantada pela rota ``POST /fornecedores/importar`` quando a extensão
+    do arquivo recebido não é reconhecida. O middleware HTTP mapeia para
+    ``400 Bad Request`` — é erro do cliente.
+
+    Args:
+        mensagem: Descrição curta do problema (ex.:
+            ``"formato '.txt' não suportado — use .csv ou .xlsx"``).
+    """
+
+    def __init__(self, mensagem: str) -> None:
+        super().__init__(mensagem)
+
+
 class ErroJobEstadoInvalido(ErroDominio):
     """Transição de estado não permitida para um :class:`Job`.
 
