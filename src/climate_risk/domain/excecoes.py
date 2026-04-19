@@ -164,6 +164,25 @@ class ErroClienteIBGE(ErroDominio):
         super().__init__(f"Falha ao consultar IBGE ({endpoint}): {mensagem}")
 
 
+class ErroConfiguracao(ErroDominio):
+    """Configuração ausente ou inválida impede a operação.
+
+    Levantada quando um adaptador depende de um caminho, credencial ou
+    variável de ambiente que o operador não preencheu — por exemplo, o
+    shapefile de municípios (``shapefile_mun_path``) referenciado pelos
+    endpoints ``/localizacoes/localizar`` e ``/cobertura/fornecedores``
+    no Slice 9. O middleware HTTP mapeia para ``500`` com mensagem clara
+    (é erro do operador, não do cliente).
+
+    Args:
+        mensagem: Descrição do problema (ex.: ``"shapefile_mun_path
+            não configurado"``).
+    """
+
+    def __init__(self, mensagem: str) -> None:
+        super().__init__(mensagem)
+
+
 class ErroJobEstadoInvalido(ErroDominio):
     """Transição de estado não permitida para um :class:`Job`.
 

@@ -13,13 +13,19 @@ from climate_risk.domain.portas.repositorios import (
     RepositorioMunicipios,
     RepositorioResultados,
 )
+from climate_risk.domain.portas.shapefile_municipios import (
+    LocalizacaoGeografica,
+    ShapefileMunicipios,
+)
 
 __all__ = [
     "FilaJobs",
     "LeitorNetCDF",
+    "LocalizacaoGeografica",
     "RepositorioExecucoes",
     "RepositorioFornecedores",
     "RepositorioJobs",
     "RepositorioMunicipios",
     "RepositorioResultados",
+    "ShapefileMunicipios",
 ]

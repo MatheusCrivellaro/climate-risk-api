@@ -209,3 +209,5 @@ __marimo__/
 # climate-risk-api
 climate_risk.db
 *.db-journal
+*.db-shm
+*.db-wal

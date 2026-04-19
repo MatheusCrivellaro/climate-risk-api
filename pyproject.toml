@@ -26,6 +26,7 @@ dependencies = [
     "httpx>=0.27",
     "rapidfuzz>=3.9",
     "shapely>=2.0",
+    "geopandas>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -106,6 +107,9 @@ addopts = [
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
+]
+markers = [
+    "shapefile: testes que dependem do fixture ESRI Shapefile (tests/fixtures/shapefile/).",
 ]
 
 [tool.coverage.run]
