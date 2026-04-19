@@ -7,6 +7,7 @@ ficam do lado de ``domain``; aqui apenas compomos.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from climate_risk.application.calculos.calcular_por_pontos import CalcularIndicesPorPontos
 from climate_risk.application.calculos.criar_execucao_por_pontos import CriarExecucaoPorPontos
+from climate_risk.application.cobertura import AnalisarCoberturaFornecedores
 from climate_risk.application.execucoes.cancelar import CancelarExecucao
 from climate_risk.application.execucoes.consultar import ConsultarExecucoes
 from climate_risk.application.execucoes.criar import CriarExecucaoCordex
@@ -23,7 +25,9 @@ from climate_risk.application.geocodificacao import (
 )
 from climate_risk.application.jobs.consultar import ConsultarJobs
 from climate_risk.application.jobs.reprocessar import ReprocessarJob
+from climate_risk.application.localizacoes import LocalizarPontos
 from climate_risk.core.config import Settings, get_settings
+from climate_risk.domain.portas.shapefile_municipios import ShapefileMunicipios
 from climate_risk.infrastructure.db.repositorios.execucoes import (
     SQLAlchemyRepositorioExecucoes,
 )
@@ -38,6 +42,7 @@ from climate_risk.infrastructure.db.sessao import get_sessao
 from climate_risk.infrastructure.fila.fila_sqlite import FilaSQLite
 from climate_risk.infrastructure.geocodificacao import CalculadorShapely, ClienteIBGEHttp
 from climate_risk.infrastructure.netcdf.leitor_xarray import LeitorXarray
+from climate_risk.infrastructure.shapefile import ShapefileGeopandas
 
 
 def obter_settings() -> Settings:
@@ -181,4 +186,53 @@ def obter_caso_uso_refresh_ibge(
         repositorio_municipios=repo_municipios,
         cliente_ibge=cliente,
         calculador_centroide=centroide,
+    )
+
+
+@lru_cache(maxsize=1)
+def _carregar_shapefile_cacheado(caminho: str) -> ShapefileGeopandas:
+    """Carrega o shapefile uma única vez por processo.
+
+    O :class:`ShapefileGeopandas` mantém o ``GeoDataFrame`` em memória
+    (~50 MB para a malha completa), então instanciamos no máximo uma vez.
+    A chave é o ``caminho`` — trocar o path invalida a cache (relevante
+    em testes que usam ``app.dependency_overrides``).
+    """
+    return ShapefileGeopandas(caminho)
+
+
+def obter_shapefile() -> ShapefileMunicipios:
+    """Provider do singleton :class:`ShapefileGeopandas` (Slice 9).
+
+    Lê ``shapefile_mun_path`` em ``Settings``; levanta
+    :class:`ErroConfiguracao` se o path estiver vazio ou o arquivo não
+    existir — o middleware HTTP mapeia para 500 com Problem Details.
+    """
+    settings = get_settings()
+    return _carregar_shapefile_cacheado(settings.shapefile_mun_path or "")
+
+
+ShapefileDep = Annotated[ShapefileMunicipios, Depends(obter_shapefile)]
+
+
+def obter_caso_uso_localizar_pontos(shapefile: ShapefileDep) -> LocalizarPontos:
+    """Compõe :class:`LocalizarPontos` (Slice 9)."""
+    return LocalizarPontos(shapefile=shapefile)
+
+
+def obter_caso_uso_analisar_cobertura(
+    repo_municipios: RepoMunicipiosDep,
+    cliente: ClienteIBGEDep,
+    centroide: CalculadorCentroideDep,
+    repo_resultados: RepoResultadosDep,
+) -> AnalisarCoberturaFornecedores:
+    """Compõe :class:`AnalisarCoberturaFornecedores` reusando Slice 8."""
+    geocodificar = GeocodificarLocalizacoes(
+        repositorio_municipios=repo_municipios,
+        cliente_ibge=cliente,
+        calculador_centroide=centroide,
+    )
+    return AnalisarCoberturaFornecedores(
+        geocodificar=geocodificar,
+        repositorio_resultados=repo_resultados,
     )

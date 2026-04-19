@@ -1,6 +1,8 @@
-"""Rotas de geocodificação (Slice 8 — Marco M3).
+"""Rotas de ``/localizacoes`` (Slices 8 e 9).
 
-``POST /localizacoes/geocodificar`` é o único endpoint de domínio; o
+- Slice 8: ``POST /localizacoes/geocodificar`` (CIDADE/UF → lat/lon).
+- Slice 9: ``POST /localizacoes/localizar`` (lat/lon → município/UF).
+
 ``POST /admin/ibge/refresh`` fica em ``rotas/admin.py``.
 """
 
@@ -14,17 +16,30 @@ from climate_risk.application.geocodificacao import (
     EntradaLocalizacao,
     GeocodificarLocalizacoes,
 )
-from climate_risk.interfaces.dependencias import obter_caso_uso_geocodificar
+from climate_risk.application.localizacoes import (
+    LocalizarPontos,
+    PontoParaLocalizar,
+)
+from climate_risk.interfaces.dependencias import (
+    obter_caso_uso_geocodificar,
+    obter_caso_uso_localizar_pontos,
+)
 from climate_risk.interfaces.schemas.comum import ProblemDetails
 from climate_risk.interfaces.schemas.geocoding import (
     GeocodificarRequest,
     GeocodificarResponse,
     LocalizacaoGeocodificadaSchema,
 )
+from climate_risk.interfaces.schemas.localizacoes import (
+    LocalizarPontosRequest,
+    LocalizarPontosResponse,
+    PontoLocalizadoResponse,
+)
 
 router = APIRouter(prefix="/localizacoes", tags=["geocodificacao"])
 
 GeocodificarDep = Annotated[GeocodificarLocalizacoes, Depends(obter_caso_uso_geocodificar)]
+LocalizarDep = Annotated[LocalizarPontos, Depends(obter_caso_uso_localizar_pontos)]
 
 
 @router.post(
@@ -64,5 +79,46 @@ async def geocodificar(
                 metodo=i.metodo,
             )
             for i in resultado.itens
+        ],
+    )
+
+
+@router.post(
+    "/localizar",
+    response_model=LocalizarPontosResponse,
+    summary="Resolve pares (lat, lon) em município/UF via shapefile.",
+    responses={
+        422: {"model": ProblemDetails, "description": "Erro de validação."},
+        500: {"model": ProblemDetails, "description": "Shapefile não configurado."},
+    },
+)
+async def localizar(
+    payload: LocalizarPontosRequest,
+    caso: LocalizarDep,
+) -> LocalizarPontosResponse:
+    """Point-in-polygon sobre a malha de municípios carregada em memória.
+
+    Pontos fora do território brasileiro voltam com ``encontrado=false``
+    e campos de município nulos — o endpoint não bloqueia o lote.
+    """
+    pontos = [
+        PontoParaLocalizar(lat=p.lat, lon=p.lon, identificador=p.identificador)
+        for p in payload.pontos
+    ]
+    resultado = await caso.executar(pontos)
+    return LocalizarPontosResponse(
+        total=resultado.total,
+        encontrados=resultado.encontrados,
+        itens=[
+            PontoLocalizadoResponse(
+                lat=item.lat,
+                lon=item.lon,
+                identificador=item.identificador,
+                encontrado=item.encontrado,
+                municipio_id=item.municipio_id,
+                uf=item.uf,
+                nome_municipio=item.nome_municipio,
+            )
+            for item in resultado.itens
         ],
     )

@@ -13,6 +13,7 @@ from climate_risk.core.logging import correlation_id_ctx
 from climate_risk.domain.excecoes import (
     ErroArquivoNCNaoEncontrado,
     ErroClienteIBGE,
+    ErroConfiguracao,
     ErroConflito,
     ErroCoordenadasLatLonAusentes,
     ErroDimensaoTempoAusente,
@@ -82,6 +83,10 @@ _MAPEAMENTO: tuple[tuple[type[Exception], _MapaErro], ...] = (
     (
         ErroConflito,
         _MapaErro(409, "Conflito de integridade", "conflito"),
+    ),
+    (
+        ErroConfiguracao,
+        _MapaErro(500, "Configuração ausente ou inválida", "configuracao"),
     ),
     (
         ErroDominio,

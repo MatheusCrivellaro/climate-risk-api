@@ -140,6 +140,18 @@ class RepositorioResultados(Protocol):
         municipio_id: int | None = None,
     ) -> int: ...
 
+    async def municipios_com_resultados(self, municipios_ids: set[int]) -> set[int]:
+        """Retorna o subconjunto de IDs com ao menos um :class:`ResultadoIndice`.
+
+        Usado por :class:`AnalisarCoberturaFornecedores` (Slice 9) para
+        identificar quais municípios geocodificados de fornecedores já
+        estão cobertos pela grade CORDEX processada.
+
+        Resultados com ``municipio_id IS NULL`` (processados por BBOX sem
+        geocodificação) são ignorados — só entram linhas com ID explícito.
+        """
+        ...
+
 
 class RepositorioJobs(Protocol):
     """CRUD de :class:`Job`. A lógica de fila (aquire, heartbeat, retry) virá no Slice 5."""

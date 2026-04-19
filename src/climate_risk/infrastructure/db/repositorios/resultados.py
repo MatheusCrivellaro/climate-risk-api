@@ -192,3 +192,21 @@ class SQLAlchemyRepositorioResultados:
         )
         resultado = await self._sessao.execute(stmt)
         return int(resultado.scalar_one())
+
+    async def municipios_com_resultados(self, municipios_ids: set[int]) -> set[int]:
+        """Intersecta ``municipios_ids`` com os IDs presentes em ``resultado_indice``.
+
+        Entrada vazia devolve ``set()`` sem tocar no banco. SQLite lida com
+        ``IN (...)`` de centenas de itens sem problema; para milhares, o
+        caller deve chunkizar por fora (não é o caso atual do Slice 9).
+        """
+        if not municipios_ids:
+            return set()
+        stmt = (
+            select(ResultadoIndiceORM.municipio_id)
+            .where(ResultadoIndiceORM.municipio_id.in_(municipios_ids))
+            .where(ResultadoIndiceORM.municipio_id.is_not(None))
+            .distinct()
+        )
+        resultado = await self._sessao.execute(stmt)
+        return {int(row) for row in resultado.scalars().all() if row is not None}
