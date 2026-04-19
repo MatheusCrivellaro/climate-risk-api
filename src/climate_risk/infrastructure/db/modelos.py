@@ -46,8 +46,9 @@ class MunicipioORM(Base):
     nome: Mapped[str] = mapped_column(String(120), nullable=False)
     nome_normalizado: Mapped[str] = mapped_column(String(120), nullable=False)
     uf: Mapped[str] = mapped_column(String(2), nullable=False)
-    lat_centroide: Mapped[float] = mapped_column(Float, nullable=False)
-    lon_centroide: Mapped[float] = mapped_column(Float, nullable=False)
+    lat_centroide: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon_centroide: Mapped[float | None] = mapped_column(Float, nullable=True)
+    atualizado_em: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (Index("idx_municipio_uf_nome_normalizado", "uf", "nome_normalizado"),)
 

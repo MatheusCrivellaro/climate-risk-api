@@ -33,8 +33,20 @@ class RepositorioMunicipios(Protocol):
 
     async def buscar_por_nome_uf(self, nome_normalizado: str, uf: str) -> Municipio | None: ...
 
+    async def listar_por_uf(self, uf: str) -> list[Municipio]:
+        """Todos os municípios de uma UF (ordenado por nome normalizado).
+
+        Usado pelo *fuzzy match*: o caso de uso carrega o candidato-set uma
+        única vez por UF e alimenta o ``rapidfuzz.process.extractOne``.
+        """
+        ...
+
     async def salvar(self, municipio: Municipio) -> None:
         """Insere ou atualiza o município (upsert por ``id``)."""
+        ...
+
+    async def salvar_lote(self, municipios: Sequence[Municipio]) -> None:
+        """Upsert em massa (``POST /admin/ibge/refresh`` insere ~5570 linhas)."""
         ...
 
     async def listar(

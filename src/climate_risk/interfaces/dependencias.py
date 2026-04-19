@@ -17,6 +17,10 @@ from climate_risk.application.calculos.criar_execucao_por_pontos import CriarExe
 from climate_risk.application.execucoes.cancelar import CancelarExecucao
 from climate_risk.application.execucoes.consultar import ConsultarExecucoes
 from climate_risk.application.execucoes.criar import CriarExecucaoCordex
+from climate_risk.application.geocodificacao import (
+    GeocodificarLocalizacoes,
+    RefreshCatalogoIBGE,
+)
 from climate_risk.application.jobs.consultar import ConsultarJobs
 from climate_risk.application.jobs.reprocessar import ReprocessarJob
 from climate_risk.core.config import Settings, get_settings
@@ -24,11 +28,15 @@ from climate_risk.infrastructure.db.repositorios.execucoes import (
     SQLAlchemyRepositorioExecucoes,
 )
 from climate_risk.infrastructure.db.repositorios.jobs import SQLAlchemyRepositorioJobs
+from climate_risk.infrastructure.db.repositorios.municipios import (
+    SQLAlchemyRepositorioMunicipios,
+)
 from climate_risk.infrastructure.db.repositorios.resultados import (
     SQLAlchemyRepositorioResultados,
 )
 from climate_risk.infrastructure.db.sessao import get_sessao
 from climate_risk.infrastructure.fila.fila_sqlite import FilaSQLite
+from climate_risk.infrastructure.geocodificacao import CalculadorShapely, ClienteIBGEHttp
 from climate_risk.infrastructure.netcdf.leitor_xarray import LeitorXarray
 
 
@@ -69,6 +77,21 @@ def obter_fila_jobs(sessao: SessaoDep) -> FilaSQLite:
     return FilaSQLite(sessao)
 
 
+def obter_repositorio_municipios(sessao: SessaoDep) -> SQLAlchemyRepositorioMunicipios:
+    """Repositório de municípios ligado à sessão da request."""
+    return SQLAlchemyRepositorioMunicipios(sessao)
+
+
+def obter_cliente_ibge() -> ClienteIBGEHttp:
+    """Instancia :class:`ClienteIBGEHttp` — lê settings via ``get_settings``."""
+    return ClienteIBGEHttp()
+
+
+def obter_calculador_centroide() -> CalculadorShapely:
+    """Instancia :class:`CalculadorShapely` (puro, sem estado)."""
+    return CalculadorShapely()
+
+
 LeitorNetCDFDep = Annotated[LeitorXarray, Depends(obter_leitor_netcdf)]
 RepoExecucoesDep = Annotated[SQLAlchemyRepositorioExecucoes, Depends(obter_repositorio_execucoes)]
 RepoResultadosDep = Annotated[
@@ -76,6 +99,11 @@ RepoResultadosDep = Annotated[
 ]
 RepoJobsDep = Annotated[SQLAlchemyRepositorioJobs, Depends(obter_repositorio_jobs)]
 FilaJobsDep = Annotated[FilaSQLite, Depends(obter_fila_jobs)]
+RepoMunicipiosDep = Annotated[
+    SQLAlchemyRepositorioMunicipios, Depends(obter_repositorio_municipios)
+]
+ClienteIBGEDep = Annotated[ClienteIBGEHttp, Depends(obter_cliente_ibge)]
+CalculadorCentroideDep = Annotated[CalculadorShapely, Depends(obter_calculador_centroide)]
 
 
 def obter_caso_uso_calcular_por_pontos(
@@ -128,3 +156,29 @@ def obter_consultar_jobs(repo_jobs: RepoJobsDep) -> ConsultarJobs:
 def obter_reprocessar_job(repo_jobs: RepoJobsDep) -> ReprocessarJob:
     """Compõe :class:`ReprocessarJob` sobre o repositório CRUD."""
     return ReprocessarJob(repositorio=repo_jobs)
+
+
+def obter_caso_uso_geocodificar(
+    repo_municipios: RepoMunicipiosDep,
+    cliente: ClienteIBGEDep,
+    centroide: CalculadorCentroideDep,
+) -> GeocodificarLocalizacoes:
+    """Compõe :class:`GeocodificarLocalizacoes` (UC-04 — Slice 8)."""
+    return GeocodificarLocalizacoes(
+        repositorio_municipios=repo_municipios,
+        cliente_ibge=cliente,
+        calculador_centroide=centroide,
+    )
+
+
+def obter_caso_uso_refresh_ibge(
+    repo_municipios: RepoMunicipiosDep,
+    cliente: ClienteIBGEDep,
+    centroide: CalculadorCentroideDep,
+) -> RefreshCatalogoIBGE:
+    """Compõe :class:`RefreshCatalogoIBGE` (``POST /admin/ibge/refresh``)."""
+    return RefreshCatalogoIBGE(
+        repositorio_municipios=repo_municipios,
+        cliente_ibge=cliente,
+        calculador_centroide=centroide,
+    )

@@ -1,0 +1,68 @@
+"""Rotas de geocodificação (Slice 8 — Marco M3).
+
+``POST /localizacoes/geocodificar`` é o único endpoint de domínio; o
+``POST /admin/ibge/refresh`` fica em ``rotas/admin.py``.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+
+from climate_risk.application.geocodificacao import (
+    EntradaLocalizacao,
+    GeocodificarLocalizacoes,
+)
+from climate_risk.interfaces.dependencias import obter_caso_uso_geocodificar
+from climate_risk.interfaces.schemas.comum import ProblemDetails
+from climate_risk.interfaces.schemas.geocoding import (
+    GeocodificarRequest,
+    GeocodificarResponse,
+    LocalizacaoGeocodificadaSchema,
+)
+
+router = APIRouter(prefix="/localizacoes", tags=["geocodificacao"])
+
+GeocodificarDep = Annotated[GeocodificarLocalizacoes, Depends(obter_caso_uso_geocodificar)]
+
+
+@router.post(
+    "/geocodificar",
+    response_model=GeocodificarResponse,
+    summary="Geocodifica pares (cidade, UF) usando cache local + IBGE.",
+    responses={
+        422: {"model": ProblemDetails, "description": "Erro de validação."},
+        503: {"model": ProblemDetails, "description": "API do IBGE indisponível."},
+    },
+)
+async def geocodificar(
+    payload: GeocodificarRequest,
+    caso: GeocodificarDep,
+) -> GeocodificarResponse:
+    """Resolve cada ``(cidade, uf)`` via cache → fuzzy → IBGE.
+
+    Entradas não encontradas não bloqueiam o lote — aparecem com
+    ``metodo="nao_encontrado"``. Se a API do IBGE falhar enquanto uma UF
+    ainda não foi cacheada, os itens daquela UF voltam com
+    ``metodo="api_falhou"`` e o endpoint ainda responde 200.
+    """
+    entradas = [EntradaLocalizacao(cidade=p.cidade, uf=p.uf.upper()) for p in payload.localizacoes]
+    resultado = await caso.executar(entradas)
+    return GeocodificarResponse(
+        total=resultado.total,
+        encontrados=resultado.encontrados,
+        nao_encontrados=resultado.nao_encontrados,
+        itens=[
+            LocalizacaoGeocodificadaSchema(
+                cidade_entrada=i.cidade_entrada,
+                uf=i.uf,
+                municipio_id=i.municipio_id,
+                nome_canonico=i.nome_canonico,
+                lat=i.lat,
+                lon=i.lon,
+                metodo=i.metodo,
+            )
+            for i in resultado.itens
+        ],
+    )

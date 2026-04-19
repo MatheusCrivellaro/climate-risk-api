@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, Response
 from climate_risk.core.logging import correlation_id_ctx
 from climate_risk.domain.excecoes import (
     ErroArquivoNCNaoEncontrado,
+    ErroClienteIBGE,
     ErroConflito,
     ErroCoordenadasLatLonAusentes,
     ErroDimensaoTempoAusente,
@@ -73,6 +74,10 @@ _MAPEAMENTO: tuple[tuple[type[Exception], _MapaErro], ...] = (
     (
         ErroEntidadeNaoEncontrada,
         _MapaErro(404, "Entidade não encontrada", "entidade-nao-encontrada"),
+    ),
+    (
+        ErroClienteIBGE,
+        _MapaErro(503, "API do IBGE indisponível", "ibge-indisponivel"),
     ),
     (
         ErroConflito,

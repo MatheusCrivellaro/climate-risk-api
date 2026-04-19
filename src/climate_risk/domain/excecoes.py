@@ -146,6 +146,24 @@ class ErroJobNaoEncontrado(ErroDominio):
         super().__init__(f"Job '{job_id}' não encontrado.")
 
 
+class ErroClienteIBGE(ErroDominio):
+    """Falha ao comunicar com a API de Localidades/Malhas do IBGE.
+
+    Encapsula qualquer erro de rede ou HTTP não-2xx persistente após as
+    retentativas configuradas. O middleware HTTP traduz para ``503 Service
+    Unavailable`` — é um erro transitório do ponto de vista do cliente.
+
+    Args:
+        mensagem: Descrição curta da falha (ex.: ``"timeout"``).
+        endpoint: URL ou caminho relativo que estava sendo consultado.
+    """
+
+    def __init__(self, mensagem: str, endpoint: str) -> None:
+        self.mensagem = mensagem
+        self.endpoint = endpoint
+        super().__init__(f"Falha ao consultar IBGE ({endpoint}): {mensagem}")
+
+
 class ErroJobEstadoInvalido(ErroDominio):
     """Transição de estado não permitida para um :class:`Job`.
 
