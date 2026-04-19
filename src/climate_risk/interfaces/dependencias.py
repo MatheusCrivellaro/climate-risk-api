@@ -19,6 +19,12 @@ from climate_risk.application.cobertura import AnalisarCoberturaFornecedores
 from climate_risk.application.execucoes.cancelar import CancelarExecucao
 from climate_risk.application.execucoes.consultar import ConsultarExecucoes
 from climate_risk.application.execucoes.criar import CriarExecucaoCordex
+from climate_risk.application.fornecedores import (
+    ConsultarFornecedores,
+    CriarFornecedor,
+    ImportarFornecedores,
+    RemoverFornecedor,
+)
 from climate_risk.application.geocodificacao import (
     GeocodificarLocalizacoes,
     RefreshCatalogoIBGE,
@@ -30,6 +36,9 @@ from climate_risk.core.config import Settings, get_settings
 from climate_risk.domain.portas.shapefile_municipios import ShapefileMunicipios
 from climate_risk.infrastructure.db.repositorios.execucoes import (
     SQLAlchemyRepositorioExecucoes,
+)
+from climate_risk.infrastructure.db.repositorios.fornecedores import (
+    SQLAlchemyRepositorioFornecedores,
 )
 from climate_risk.infrastructure.db.repositorios.jobs import SQLAlchemyRepositorioJobs
 from climate_risk.infrastructure.db.repositorios.municipios import (
@@ -87,6 +96,11 @@ def obter_repositorio_municipios(sessao: SessaoDep) -> SQLAlchemyRepositorioMuni
     return SQLAlchemyRepositorioMunicipios(sessao)
 
 
+def obter_repositorio_fornecedores(sessao: SessaoDep) -> SQLAlchemyRepositorioFornecedores:
+    """Repositório de fornecedores ligado à sessão da request (Slice 10)."""
+    return SQLAlchemyRepositorioFornecedores(sessao)
+
+
 def obter_cliente_ibge() -> ClienteIBGEHttp:
     """Instancia :class:`ClienteIBGEHttp` — lê settings via ``get_settings``."""
     return ClienteIBGEHttp()
@@ -106,6 +120,9 @@ RepoJobsDep = Annotated[SQLAlchemyRepositorioJobs, Depends(obter_repositorio_job
 FilaJobsDep = Annotated[FilaSQLite, Depends(obter_fila_jobs)]
 RepoMunicipiosDep = Annotated[
     SQLAlchemyRepositorioMunicipios, Depends(obter_repositorio_municipios)
+]
+RepoFornecedoresDep = Annotated[
+    SQLAlchemyRepositorioFornecedores, Depends(obter_repositorio_fornecedores)
 ]
 ClienteIBGEDep = Annotated[ClienteIBGEHttp, Depends(obter_cliente_ibge)]
 CalculadorCentroideDep = Annotated[CalculadorShapely, Depends(obter_calculador_centroide)]
@@ -236,3 +253,23 @@ def obter_caso_uso_analisar_cobertura(
         geocodificar=geocodificar,
         repositorio_resultados=repo_resultados,
     )
+
+
+def obter_caso_uso_criar_fornecedor(repo: RepoFornecedoresDep) -> CriarFornecedor:
+    """Compõe :class:`CriarFornecedor` (Slice 10)."""
+    return CriarFornecedor(repositorio=repo)
+
+
+def obter_caso_uso_consultar_fornecedores(repo: RepoFornecedoresDep) -> ConsultarFornecedores:
+    """Compõe :class:`ConsultarFornecedores` (Slice 10)."""
+    return ConsultarFornecedores(repositorio=repo)
+
+
+def obter_caso_uso_remover_fornecedor(repo: RepoFornecedoresDep) -> RemoverFornecedor:
+    """Compõe :class:`RemoverFornecedor` (Slice 10)."""
+    return RemoverFornecedor(repositorio=repo)
+
+
+def obter_caso_uso_importar_fornecedores(repo: RepoFornecedoresDep) -> ImportarFornecedores:
+    """Compõe :class:`ImportarFornecedores` (Slice 10)."""
+    return ImportarFornecedores(repositorio=repo)

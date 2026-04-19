@@ -60,21 +60,35 @@ class RepositorioMunicipios(Protocol):
 
 
 class RepositorioFornecedores(Protocol):
-    """CRUD de fornecedores geolocalizados."""
+    """CRUD de fornecedores."""
 
     async def buscar_por_id(self, fornecedor_id: str) -> Fornecedor | None: ...
+
+    async def buscar_por_nome_cidade_uf(self, nome: str, cidade: str, uf: str) -> Fornecedor | None:
+        """Usado pelo import para detectar duplicatas (combinação lógica única)."""
+        ...
 
     async def salvar(self, fornecedor: Fornecedor) -> None:
         """Insere o fornecedor. Levanta :class:`ErroConflito` se ``id`` já existe."""
         ...
 
+    async def salvar_lote(self, fornecedores: Sequence[Fornecedor]) -> None:
+        """Insere vários fornecedores em uma transação."""
+        ...
+
     async def listar(
         self,
+        uf: str | None = None,
+        cidade: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Fornecedor]: ...
 
-    async def contar(self) -> int: ...
+    async def contar(
+        self,
+        uf: str | None = None,
+        cidade: str | None = None,
+    ) -> int: ...
 
     async def remover(self, fornecedor_id: str) -> bool:
         """Remove e retorna ``True`` se o fornecedor existia; ``False`` caso contrário."""

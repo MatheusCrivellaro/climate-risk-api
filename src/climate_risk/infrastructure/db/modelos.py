@@ -59,14 +59,22 @@ class FornecedorORM(Base):
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     identificador_externo: Mapped[str | None] = mapped_column(String(120), nullable=True)
     nome: Mapped[str] = mapped_column(String(200), nullable=False)
-    lat: Mapped[float] = mapped_column(Float, nullable=False)
-    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    cidade: Mapped[str] = mapped_column(String(120), nullable=False)
+    uf: Mapped[str] = mapped_column(String(2), nullable=False)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     municipio_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("municipio.id", ondelete="SET NULL"),
         nullable=True,
     )
     criado_em: Mapped[str] = mapped_column(String(32), nullable=False)
+    atualizado_em: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        Index("idx_fornecedor_uf_cidade", "uf", "cidade"),
+        Index("idx_fornecedor_nome_cidade_uf", "nome", "cidade", "uf"),
+    )
 
 
 class ExecucaoORM(Base):

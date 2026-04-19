@@ -12,23 +12,30 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class Fornecedor:
-    """Fornecedor geolocalizado.
+    """Fornecedor.
 
     Atributos:
         id: ULID com prefixo ``"forn_"`` gerado pela aplicação.
+        nome: Nome da empresa / identificação de apresentação.
+        cidade: Município declarado pelo cliente (pode divergir do nome
+            canônico do IBGE).
+        uf: Sigla da UF (2 letras maiúsculas).
         identificador_externo: Identificador opcional fornecido pelo cliente
             (ex.: código interno). Pode ser ``None``.
-        nome: Nome de apresentação.
-        lat: Latitude em graus decimais.
+        lat: Latitude em graus decimais, preenchida após geocodificação.
         lon: Longitude em graus decimais (convenção ``-180..180``).
         municipio_id: Código IBGE do município, quando já geocodificado.
         criado_em: Timestamp de criação em UTC.
+        atualizado_em: Timestamp da última modificação em UTC.
     """
 
     id: str
-    identificador_externo: str | None
     nome: str
-    lat: float
-    lon: float
-    municipio_id: int | None
+    cidade: str
+    uf: str
     criado_em: datetime
+    atualizado_em: datetime
+    identificador_externo: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    municipio_id: int | None = None

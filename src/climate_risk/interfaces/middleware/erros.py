@@ -19,6 +19,7 @@ from climate_risk.domain.excecoes import (
     ErroDimensaoTempoAusente,
     ErroDominio,
     ErroEntidadeNaoEncontrada,
+    ErroFormatoInvalido,
     ErroJobEstadoInvalido,
     ErroJobNaoEncontrado,
     ErroLeituraNetCDF,
@@ -43,6 +44,10 @@ _MAPEAMENTO: tuple[tuple[type[Exception], _MapaErro], ...] = (
     (
         ErroLimitePontosSincrono,
         _MapaErro(400, "Limite de pontos síncronos excedido", "limite-pontos-sincrono"),
+    ),
+    (
+        ErroFormatoInvalido,
+        _MapaErro(400, "Formato de arquivo não suportado", "formato-invalido"),
     ),
     (
         ErroArquivoNCNaoEncontrado,
