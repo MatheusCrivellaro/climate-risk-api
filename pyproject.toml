@@ -23,6 +23,9 @@ dependencies = [
     "xarray>=2024.6",
     "netcdf4>=1.7",
     "python-ulid>=3.0",
+    "httpx>=0.27",
+    "rapidfuzz>=3.9",
+    "shapely>=2.0",
 ]
 
 [project.optional-dependencies]

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +28,20 @@ class SQLAlchemyRepositorioMunicipios:
             uf=orm.uf,
             lat_centroide=orm.lat_centroide,
             lon_centroide=orm.lon_centroide,
+            atualizado_em=_parse_iso(orm.atualizado_em),
         )
+
+    @staticmethod
+    def _to_row(municipio: Municipio) -> dict[str, object]:
+        return {
+            "id": municipio.id,
+            "nome": municipio.nome,
+            "nome_normalizado": municipio.nome_normalizado,
+            "uf": municipio.uf,
+            "lat_centroide": municipio.lat_centroide,
+            "lon_centroide": municipio.lon_centroide,
+            "atualizado_em": municipio.atualizado_em.isoformat(),
+        }
 
     async def buscar_por_id(self, municipio_id: int) -> Municipio | None:
         orm = await self._sessao.get(MunicipioORM, municipio_id)
@@ -40,20 +56,42 @@ class SQLAlchemyRepositorioMunicipios:
         orm = resultado.scalar_one_or_none()
         return self._to_domain(orm) if orm else None
 
+    async def listar_por_uf(self, uf: str) -> list[Municipio]:
+        stmt = (
+            select(MunicipioORM)
+            .where(MunicipioORM.uf == uf)
+            .order_by(MunicipioORM.nome_normalizado)
+        )
+        resultado = await self._sessao.execute(stmt)
+        return [self._to_domain(orm) for orm in resultado.scalars().all()]
+
     async def salvar(self, municipio: Municipio) -> None:
         """Upsert por ``id`` (INSERT ... ON CONFLICT DO UPDATE)."""
-        valores = {
-            "id": municipio.id,
-            "nome": municipio.nome,
-            "nome_normalizado": municipio.nome_normalizado,
-            "uf": municipio.uf,
-            "lat_centroide": municipio.lat_centroide,
-            "lon_centroide": municipio.lon_centroide,
-        }
+        valores = self._to_row(municipio)
         stmt = sqlite_insert(MunicipioORM).values(**valores)
         stmt = stmt.on_conflict_do_update(
             index_elements=[MunicipioORM.id],
             set_={k: v for k, v in valores.items() if k != "id"},
+        )
+        await self._sessao.execute(stmt)
+        await self._sessao.commit()
+
+    async def salvar_lote(self, municipios: Sequence[Municipio]) -> None:
+        """Upsert em massa — uma única instrução para todo o lote."""
+        if not municipios:
+            return
+        valores = [self._to_row(m) for m in municipios]
+        stmt = sqlite_insert(MunicipioORM).values(valores)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[MunicipioORM.id],
+            set_={
+                "nome": stmt.excluded.nome,
+                "nome_normalizado": stmt.excluded.nome_normalizado,
+                "uf": stmt.excluded.uf,
+                "lat_centroide": stmt.excluded.lat_centroide,
+                "lon_centroide": stmt.excluded.lon_centroide,
+                "atualizado_em": stmt.excluded.atualizado_em,
+            },
         )
         await self._sessao.execute(stmt)
         await self._sessao.commit()
@@ -83,3 +121,10 @@ class SQLAlchemyRepositorioMunicipios:
         resultado = await self._sessao.execute(stmt)
         await self._sessao.commit()
         return bool(resultado.rowcount)  # type: ignore[attr-defined]
+
+
+def _parse_iso(valor: str) -> datetime:
+    dt = datetime.fromisoformat(valor)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     job_timeout_processar_cordex_seconds: int = 7200
     job_timeout_calcular_pontos_seconds: int = 1800
     ibge_base_url: str = "https://servicodados.ibge.gov.br"
+    ibge_timeout_segundos: float = 30.0
+    ibge_max_retries: int = 3
     shapefile_uf_path: str | None = None
     shapefile_mun_path: str | None = None
     sincrono_pontos_max: int = 100
