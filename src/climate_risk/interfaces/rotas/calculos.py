@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from climate_risk.application.calculos.calcular_por_pontos import (
     CalcularIndicesPorPontos,
@@ -13,15 +13,21 @@ from climate_risk.application.calculos.calcular_por_pontos import (
     PontoEntradaDominio,
     ResultadoCalculo,
 )
+from climate_risk.application.calculos.criar_execucao_por_pontos import (
+    CriarExecucaoPorPontos,
+    ParametrosCriacaoExecucaoPontos,
+    ResultadoCriacaoExecucaoPontos,
+)
 from climate_risk.core.config import Settings
-from climate_risk.domain.excecoes import ErroLimitePontosSincrono
 from climate_risk.domain.indices.calculadora import ParametrosIndices
 from climate_risk.domain.indices.p95 import PeriodoBaseline
 from climate_risk.interfaces.dependencias import (
     obter_caso_uso_calcular_por_pontos,
+    obter_caso_uso_criar_execucao_por_pontos,
     obter_settings,
 )
 from climate_risk.interfaces.schemas.calculos import (
+    CalculoPontosAsyncResponse,
     CalculoPorPontosRequest,
     CalculoPorPontosResponse,
     IndicesResposta,
@@ -32,17 +38,27 @@ from climate_risk.interfaces.schemas.comum import ProblemDetails
 router = APIRouter(prefix="/calculos", tags=["calculos"])
 
 
-CasoUsoDep = Annotated[CalcularIndicesPorPontos, Depends(obter_caso_uso_calcular_por_pontos)]
+SincronoDep = Annotated[CalcularIndicesPorPontos, Depends(obter_caso_uso_calcular_por_pontos)]
+AsyncDep = Annotated[CriarExecucaoPorPontos, Depends(obter_caso_uso_criar_execucao_por_pontos)]
 SettingsDep = Annotated[Settings, Depends(obter_settings)]
 
 
 @router.post(
     "/pontos",
-    response_model=CalculoPorPontosResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Calcula índices anuais para uma lista de pontos (UC-03 síncrono).",
+    response_model=None,
+    summary="Calcula índices anuais para pontos (UC-03 síncrono/assíncrono).",
     responses={
-        400: {"model": ProblemDetails, "description": "Violação de regra de negócio."},
+        200: {
+            "model": CalculoPorPontosResponse,
+            "description": "Lote pequeno processado de forma síncrona.",
+        },
+        202: {
+            "model": CalculoPontosAsyncResponse,
+            "description": (
+                "Lote grande (> ``sincrono_pontos_max`` pontos): job enfileirado. "
+                "Acompanhe via ``GET /execucoes/{id}``."
+            ),
+        },
         404: {"model": ProblemDetails, "description": "Arquivo NetCDF não encontrado."},
         422: {"model": ProblemDetails, "description": "Erro de validação ou dataset inválido."},
         500: {"model": ProblemDetails, "description": "Erro interno."},
@@ -50,44 +66,35 @@ SettingsDep = Annotated[Settings, Depends(obter_settings)]
 )
 async def calcular_por_pontos(
     payload: CalculoPorPontosRequest,
-    caso_uso: CasoUsoDep,
+    caso_sincrono: SincronoDep,
+    caso_async: AsyncDep,
     settings: SettingsDep,
-) -> CalculoPorPontosResponse:
-    """Executa o fluxo UC-03 síncrono end-to-end.
+    response: Response,
+) -> CalculoPorPontosResponse | CalculoPontosAsyncResponse:
+    """Roteamento síncrono vs. assíncrono.
 
-    - Valida o limite de ``settings.sincrono_pontos_max`` pontos (levanta
-      :class:`ErroLimitePontosSincrono` → 400).
-    - Traduz o payload Pydantic para DTOs de ``application`` (ADR-005).
-    - Invoca o caso de uso.
-    - Traduz o resultado para a resposta Pydantic.
+    - ``len(pontos) <= settings.sincrono_pontos_max`` → 200 com resultados.
+    - Caso contrário → 202 com ``execucao_id``/``job_id`` (Slice 7).
+
+    Ambos os ramos traduzem o payload Pydantic para dataclasses de
+    ``application`` antes de invocar o caso de uso (ADR-005).
     """
     if len(payload.pontos) > settings.sincrono_pontos_max:
-        raise ErroLimitePontosSincrono(
-            total=len(payload.pontos),
-            maximo=settings.sincrono_pontos_max,
-        )
+        params_async = _traduzir_request_para_params_async(payload)
+        criacao = await caso_async.executar(params_async)
+        response.status_code = status.HTTP_202_ACCEPTED
+        return _traduzir_criacao_async_para_response(criacao)
 
     parametros = _traduzir_request_para_params(payload)
-    resultado = await caso_uso.executar(parametros)
+    resultado = await caso_sincrono.executar(parametros)
     return _traduzir_resultado_para_response(resultado, total_pontos=len(payload.pontos))
 
 
 def _traduzir_request_para_params(payload: CalculoPorPontosRequest) -> ParametrosCalculo:
     """Pydantic → dataclasses de domínio/aplicação (sem vazar Pydantic)."""
-    parametros_indices = ParametrosIndices(
-        freq_thr_mm=payload.parametros_indices.freq_thr_mm,
-        heavy_thresholds=(payload.parametros_indices.heavy20, payload.parametros_indices.heavy50),
-    )
-    baseline: PeriodoBaseline | None = None
-    if payload.parametros_indices.p95_baseline is not None:
-        baseline = PeriodoBaseline(
-            inicio=payload.parametros_indices.p95_baseline.inicio,
-            fim=payload.parametros_indices.p95_baseline.fim,
-        )
-    pontos = [
-        PontoEntradaDominio(lat=p.lat, lon=p.lon, identificador=p.identificador)
-        for p in payload.pontos
-    ]
+    parametros_indices = _traduzir_parametros_indices(payload)
+    baseline = _traduzir_baseline(payload)
+    pontos = _traduzir_pontos(payload)
     return ParametrosCalculo(
         arquivo_nc=payload.arquivo_nc,
         cenario=payload.cenario,
@@ -98,6 +105,42 @@ def _traduzir_request_para_params(payload: CalculoPorPontosRequest) -> Parametro
         p95_wet_thr=payload.parametros_indices.p95_wet_thr,
         persistir=payload.persistir,
     )
+
+
+def _traduzir_request_para_params_async(
+    payload: CalculoPorPontosRequest,
+) -> ParametrosCriacaoExecucaoPontos:
+    """Versão assíncrona — sem ``persistir`` (o worker sempre persiste)."""
+    return ParametrosCriacaoExecucaoPontos(
+        arquivo_nc=payload.arquivo_nc,
+        cenario=payload.cenario,
+        variavel=payload.variavel,
+        pontos=_traduzir_pontos(payload),
+        parametros_indices=_traduzir_parametros_indices(payload),
+        p95_baseline=_traduzir_baseline(payload),
+        p95_wet_thr=payload.parametros_indices.p95_wet_thr,
+    )
+
+
+def _traduzir_parametros_indices(payload: CalculoPorPontosRequest) -> ParametrosIndices:
+    return ParametrosIndices(
+        freq_thr_mm=payload.parametros_indices.freq_thr_mm,
+        heavy_thresholds=(payload.parametros_indices.heavy20, payload.parametros_indices.heavy50),
+    )
+
+
+def _traduzir_baseline(payload: CalculoPorPontosRequest) -> PeriodoBaseline | None:
+    baseline_entrada = payload.parametros_indices.p95_baseline
+    if baseline_entrada is None:
+        return None
+    return PeriodoBaseline(inicio=baseline_entrada.inicio, fim=baseline_entrada.fim)
+
+
+def _traduzir_pontos(payload: CalculoPorPontosRequest) -> list[PontoEntradaDominio]:
+    return [
+        PontoEntradaDominio(lat=p.lat, lon=p.lon, identificador=p.identificador)
+        for p in payload.pontos
+    ]
 
 
 def _traduzir_resultado_para_response(
@@ -133,6 +176,22 @@ def _traduzir_resultado_para_response(
         total_pontos=total_pontos,
         total_resultados=len(linhas),
         resultados=linhas,
+    )
+
+
+def _traduzir_criacao_async_para_response(
+    resultado: ResultadoCriacaoExecucaoPontos,
+) -> CalculoPontosAsyncResponse:
+    return CalculoPontosAsyncResponse(
+        execucao_id=resultado.execucao_id,
+        job_id=resultado.job_id,
+        status=resultado.status,
+        total_pontos=resultado.total_pontos,
+        criado_em=resultado.criado_em.isoformat(),
+        links={
+            "self": f"/execucoes/{resultado.execucao_id}",
+            "job": f"/jobs/{resultado.job_id}",
+        },
     )
 
 
