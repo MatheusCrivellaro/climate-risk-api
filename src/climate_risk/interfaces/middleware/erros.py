@@ -24,6 +24,7 @@ from climate_risk.domain.excecoes import (
     ErroJobNaoEncontrado,
     ErroLeituraNetCDF,
     ErroLimitePontosSincrono,
+    ErroValidacao,
     ErroVariavelAusente,
 )
 
@@ -48,6 +49,10 @@ _MAPEAMENTO: tuple[tuple[type[Exception], _MapaErro], ...] = (
     (
         ErroFormatoInvalido,
         _MapaErro(400, "Formato de arquivo não suportado", "formato-invalido"),
+    ),
+    (
+        ErroValidacao,
+        _MapaErro(422, "Parâmetros inválidos", "validacao"),
     ),
     (
         ErroArquivoNCNaoEncontrado,

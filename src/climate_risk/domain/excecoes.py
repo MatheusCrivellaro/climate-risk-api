@@ -199,6 +199,24 @@ class ErroFormatoInvalido(ErroDominio):
         super().__init__(mensagem)
 
 
+class ErroValidacao(ErroDominio):
+    """Combinação inválida ou incoerente de parâmetros de entrada.
+
+    Diferente das validações de tipo/forma (resolvidas pelo Pydantic com
+    ``422``), esta exceção expressa regras de negócio envolvendo
+    **combinações** de campos — ex.: ``raio_km`` fornecido sem
+    ``centro_lat``/``centro_lon``, ``agrupar_por`` com chave
+    desconhecida. O middleware HTTP mapeia para ``422 Unprocessable
+    Entity``.
+
+    Args:
+        mensagem: Descrição curta e orientada ao cliente.
+    """
+
+    def __init__(self, mensagem: str) -> None:
+        super().__init__(mensagem)
+
+
 class ErroJobEstadoInvalido(ErroDominio):
     """Transição de estado não permitida para um :class:`Job`.
 

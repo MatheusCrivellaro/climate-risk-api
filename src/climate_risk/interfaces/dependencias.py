@@ -32,6 +32,11 @@ from climate_risk.application.geocodificacao import (
 from climate_risk.application.jobs.consultar import ConsultarJobs
 from climate_risk.application.jobs.reprocessar import ReprocessarJob
 from climate_risk.application.localizacoes import LocalizarPontos
+from climate_risk.application.resultados import (
+    AgregarResultados,
+    ConsultarResultados,
+    ConsultarStats,
+)
 from climate_risk.core.config import Settings, get_settings
 from climate_risk.domain.portas.shapefile_municipios import ShapefileMunicipios
 from climate_risk.infrastructure.db.repositorios.execucoes import (
@@ -273,3 +278,18 @@ def obter_caso_uso_remover_fornecedor(repo: RepoFornecedoresDep) -> RemoverForne
 def obter_caso_uso_importar_fornecedores(repo: RepoFornecedoresDep) -> ImportarFornecedores:
     """Compõe :class:`ImportarFornecedores` (Slice 10)."""
     return ImportarFornecedores(repositorio=repo)
+
+
+def obter_caso_uso_consultar_resultados(repo: RepoResultadosDep) -> ConsultarResultados:
+    """Compõe :class:`ConsultarResultados` (Slice 11)."""
+    return ConsultarResultados(repositorio=repo)
+
+
+def obter_caso_uso_agregar_resultados(repo: RepoResultadosDep) -> AgregarResultados:
+    """Compõe :class:`AgregarResultados` (Slice 11)."""
+    return AgregarResultados(repositorio=repo)
+
+
+def obter_caso_uso_consultar_stats(repo: RepoResultadosDep) -> ConsultarStats:
+    """Compõe :class:`ConsultarStats` (Slice 11)."""
+    return ConsultarStats(repositorio=repo)
