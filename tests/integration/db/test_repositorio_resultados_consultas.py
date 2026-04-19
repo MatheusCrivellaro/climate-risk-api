@@ -42,9 +42,7 @@ async def _criar_execucao(
     return execucao.id
 
 
-async def _criar_municipio(
-    sessao: AsyncSession, id_mun: int = 3550308, uf: str = "SP"
-) -> int:
+async def _criar_municipio(sessao: AsyncSession, id_mun: int = 3550308, uf: str = "SP") -> int:
     repo = SQLAlchemyRepositorioMunicipios(sessao)
     mun = Municipio(
         id=id_mun,
@@ -101,9 +99,7 @@ async def test_consultar_com_filtros_diversos(async_session: AsyncSession) -> No
 
     # ano exato + IN(...).
     itens = await repo.consultar(
-        FiltrosConsultaResultados(
-            execucao_id=exec_id, ano=2026, nomes_indices=("PRCPTOT",)
-        )
+        FiltrosConsultaResultados(execucao_id=exec_id, ano=2026, nomes_indices=("PRCPTOT",))
     )
     assert len(itens) == 1
     assert itens[0].ano == 2026 and itens[0].nome_indice == "PRCPTOT"
@@ -119,9 +115,7 @@ async def test_consultar_com_filtros_diversos(async_session: AsyncSession) -> No
     )
     assert len(itens) == 4
 
-    total = await repo.contar_por_filtros(
-        FiltrosConsultaResultados(execucao_id=exec_id)
-    )
+    total = await repo.contar_por_filtros(FiltrosConsultaResultados(execucao_id=exec_id))
     assert total == 5
 
 
@@ -141,9 +135,7 @@ async def test_consultar_com_cenario_variavel_via_join(
         ]
     )
 
-    itens = await repo.consultar(
-        FiltrosConsultaResultados(cenario="rcp85", variavel="pr")
-    )
+    itens = await repo.consultar(FiltrosConsultaResultados(cenario="rcp85", variavel="pr"))
     assert len(itens) == 1
     assert itens[0].execucao_id == exec_85
 
@@ -187,17 +179,13 @@ async def test_consultar_bbox_simples_e_antimeridiano(
 
     # BBox normal.
     itens = await repo.consultar(
-        FiltrosConsultaResultados(
-            lat_min=-1.0, lat_max=1.0, lon_min=-5.0, lon_max=5.0
-        )
+        FiltrosConsultaResultados(lat_min=-1.0, lat_max=1.0, lon_min=-5.0, lon_max=5.0)
     )
     assert len(itens) == 1
 
     # BBox cruzando antimeridiano (lon_min > lon_max).
     itens = await repo.consultar(
-        FiltrosConsultaResultados(
-            lat_min=-1.0, lat_max=1.0, lon_min=165.0, lon_max=-170.0
-        )
+        FiltrosConsultaResultados(lat_min=-1.0, lat_max=1.0, lon_min=165.0, lon_max=-170.0)
     )
     assert len(itens) == 2
     assert {round(r.lon) for r in itens} == {170, -175}
@@ -210,12 +198,8 @@ async def test_paginacao(async_session: AsyncSession) -> None:
 
     await repo.salvar_lote([_res(exec_id, ano=2020 + i) for i in range(5)])
 
-    pag1 = await repo.consultar(
-        FiltrosConsultaResultados(execucao_id=exec_id), limit=2, offset=0
-    )
-    pag2 = await repo.consultar(
-        FiltrosConsultaResultados(execucao_id=exec_id), limit=2, offset=2
-    )
+    pag1 = await repo.consultar(FiltrosConsultaResultados(execucao_id=exec_id), limit=2, offset=0)
+    pag2 = await repo.consultar(FiltrosConsultaResultados(execucao_id=exec_id), limit=2, offset=2)
     assert len(pag1) == 2
     assert len(pag2) == 2
     ids = {r.id for r in pag1} | {r.id for r in pag2}
@@ -278,9 +262,7 @@ async def test_agregar_percentil_em_python(async_session: AsyncSession) -> None:
     exec_id = await _criar_execucao(async_session)
     repo = SQLAlchemyRepositorioResultados(async_session)
 
-    await repo.salvar_lote(
-        [_res(exec_id, valor=float(v)) for v in range(1, 101)]
-    )
+    await repo.salvar_lote([_res(exec_id, valor=float(v)) for v in range(1, 101)])
 
     grupos = await repo.agregar(
         FiltrosAgregacaoResultados(

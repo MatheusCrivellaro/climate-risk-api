@@ -107,8 +107,7 @@ class AgregarResultados:
     def _validar(self, filtros: FiltrosAgregacao) -> None:
         if filtros.agregacao not in _AGREGACOES:
             raise ErroValidacao(
-                f"'agregacao' deve ser um de {sorted(_AGREGACOES)}; "
-                f"recebido '{filtros.agregacao}'."
+                f"'agregacao' deve ser um de {sorted(_AGREGACOES)}; recebido '{filtros.agregacao}'."
             )
         for dim in filtros.agrupar_por:
             if dim not in _DIMENSOES:
@@ -133,9 +132,7 @@ class AgregarResultados:
         ):
             raise ErroValidacao("'ano_min' não pode ser maior que 'ano_max'.")
 
-    async def _agregar_no_repositorio(
-        self, filtros: FiltrosAgregacao
-    ) -> list[GrupoAgregado]:
+    async def _agregar_no_repositorio(self, filtros: FiltrosAgregacao) -> list[GrupoAgregado]:
         filtros_repo = FiltrosConsultaResultados(
             execucao_id=filtros.execucao_id,
             cenario=filtros.cenario,
@@ -158,13 +155,10 @@ class AgregarResultados:
         )
         grupos_raw = await self._repositorio.agregar(filtros_agg)
         return [
-            GrupoAgregado(grupo=g.grupo, valor=g.valor, n_amostras=g.n_amostras)
-            for g in grupos_raw
+            GrupoAgregado(grupo=g.grupo, valor=g.valor, n_amostras=g.n_amostras) for g in grupos_raw
         ]
 
-    async def _agregar_em_memoria(
-        self, filtros: FiltrosAgregacao
-    ) -> list[GrupoAgregado]:
+    async def _agregar_em_memoria(self, filtros: FiltrosAgregacao) -> list[GrupoAgregado]:
         assert filtros.raio_km is not None
         assert filtros.centro_lat is not None
         assert filtros.centro_lon is not None
@@ -192,14 +186,10 @@ class AgregarResultados:
         filtrados = [
             r
             for r in candidatos
-            if distancia_haversine_km(
-                filtros.centro_lat, filtros.centro_lon, r.lat, r.lon
-            )
+            if distancia_haversine_km(filtros.centro_lat, filtros.centro_lon, r.lat, r.lon)
             <= filtros.raio_km
         ]
-        return _agregar_em_python(
-            filtrados, filtros.agregacao, filtros.agrupar_por
-        )
+        return _agregar_em_python(filtrados, filtros.agregacao, filtros.agrupar_por)
 
 
 def _agregar_em_python(
@@ -240,15 +230,11 @@ def _agregar_em_python(
         else:
             valor_final = _aplicar_agregacao(valores, agregacao)
             n_amostras = len(valores)
-        saida.append(
-            GrupoAgregado(grupo=grupo_dict, valor=valor_final, n_amostras=n_amostras)
-        )
+        saida.append(GrupoAgregado(grupo=grupo_dict, valor=valor_final, n_amostras=n_amostras))
     return saida
 
 
-def _extrair_chave(
-    resultado: ResultadoIndice, agrupar_por: tuple[str, ...]
-) -> tuple[object, ...]:
+def _extrair_chave(resultado: ResultadoIndice, agrupar_por: tuple[str, ...]) -> tuple[object, ...]:
     chaves: list[object] = []
     for dim in agrupar_por:
         if dim == "ano":

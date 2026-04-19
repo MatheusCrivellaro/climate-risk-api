@@ -48,9 +48,7 @@ class _RepoFake:
     async def contar_por_filtros(self, _: FiltrosConsultaResultados) -> int:
         return 0
 
-    async def agregar(
-        self, _: FiltrosAgregacaoResultados
-    ) -> list[GrupoAgregadoRaw]:
+    async def agregar(self, _: FiltrosAgregacaoResultados) -> list[GrupoAgregadoRaw]:
         return []
 
     async def distinct_cenarios(self) -> list[str]:

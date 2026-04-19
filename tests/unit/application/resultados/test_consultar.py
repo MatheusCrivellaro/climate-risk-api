@@ -116,9 +116,7 @@ class _RepoFake:
             if filtros.lon_min <= filtros.lon_max:
                 itens = [i for i in itens if filtros.lon_min <= i.lon <= filtros.lon_max]
             else:
-                itens = [
-                    i for i in itens if i.lon >= filtros.lon_min or i.lon <= filtros.lon_max
-                ]
+                itens = [i for i in itens if i.lon >= filtros.lon_min or i.lon <= filtros.lon_max]
         return itens
 
 
@@ -144,9 +142,7 @@ async def test_filtro_por_ano_nomes_indices() -> None:
     )
     caso = ConsultarResultados(repositorio=repo)  # type: ignore[arg-type]
 
-    pagina = await caso.executar(
-        FiltrosResultados(ano=2026, nomes_indices=("CDD",), limit=10)
-    )
+    pagina = await caso.executar(FiltrosResultados(ano=2026, nomes_indices=("CDD",), limit=10))
 
     assert [r.id for r in pagina.items] == ["c"]
 
@@ -193,9 +189,7 @@ async def test_raio_negativo_rejeitado() -> None:
     caso = ConsultarResultados(repositorio=repo)  # type: ignore[arg-type]
 
     with pytest.raises(ErroValidacao, match="raio_km"):
-        await caso.executar(
-            FiltrosResultados(raio_km=-1.0, centro_lat=0.0, centro_lon=0.0)
-        )
+        await caso.executar(FiltrosResultados(raio_km=-1.0, centro_lat=0.0, centro_lon=0.0))
 
 
 @pytest.mark.asyncio

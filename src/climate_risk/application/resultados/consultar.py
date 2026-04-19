@@ -179,15 +179,11 @@ class ConsultarResultados:
 
         # Buffer grande: pega até LIMIT_MAXIMO candidatos do BBOX para
         # poder filtrar pelo raio exato. O repositório já faz o corte em SQL.
-        candidatos = await self._repositorio.consultar(
-            base, limit=self.LIMIT_MAXIMO, offset=0
-        )
+        candidatos = await self._repositorio.consultar(base, limit=self.LIMIT_MAXIMO, offset=0)
         filtrados = [
             r
             for r in candidatos
-            if distancia_haversine_km(
-                filtros.centro_lat, filtros.centro_lon, r.lat, r.lon
-            )
+            if distancia_haversine_km(filtros.centro_lat, filtros.centro_lon, r.lat, r.lon)
             <= filtros.raio_km
         ]
         total = len(filtrados)

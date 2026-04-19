@@ -60,9 +60,7 @@ class TestBBoxAproximadoPorRaio:
 
     def test_bbox_contem_todos_os_pontos_a_raio_menor(self) -> None:
         centro_lat, centro_lon, raio = -23.55, -46.63, 50.0
-        lat_min, lat_max, lon_min, lon_max = bbox_aproximado_por_raio(
-            centro_lat, centro_lon, raio
-        )
+        lat_min, lat_max, lon_min, lon_max = bbox_aproximado_por_raio(centro_lat, centro_lon, raio)
         # Sortear alguns pontos dentro do círculo exato e checar se caem no BBOX.
         for dlat_fr, dlon_fr in [
             (0.0, 0.0),

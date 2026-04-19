@@ -110,9 +110,7 @@ async def test_delega_ao_repositorio_e_propaga_grupos() -> None:
     )
     caso = AgregarResultados(repositorio=repo)  # type: ignore[arg-type]
 
-    resultado = await caso.executar(
-        FiltrosAgregacao(agregacao="media", agrupar_por=("ano",))
-    )
+    resultado = await caso.executar(FiltrosAgregacao(agregacao="media", agrupar_por=("ano",)))
 
     assert resultado.agregacao == "media"
     assert resultado.agrupar_por == ("ano",)
@@ -136,9 +134,7 @@ async def test_dimensao_agrupar_por_invalida_rejeitada() -> None:
     caso = AgregarResultados(repositorio=repo)  # type: ignore[arg-type]
 
     with pytest.raises(ErroValidacao, match="agrupar_por"):
-        await caso.executar(
-            FiltrosAgregacao(agregacao="media", agrupar_por=("foobar",))
-        )
+        await caso.executar(FiltrosAgregacao(agregacao="media", agrupar_por=("foobar",)))
 
 
 @pytest.mark.asyncio
@@ -211,9 +207,7 @@ async def test_raio_km_zero_rejeitado() -> None:
     caso = AgregarResultados(repositorio=repo)  # type: ignore[arg-type]
 
     with pytest.raises(ErroValidacao, match="raio_km"):
-        await caso.executar(
-            FiltrosAgregacao(raio_km=0.0, centro_lat=0.0, centro_lon=0.0)
-        )
+        await caso.executar(FiltrosAgregacao(raio_km=0.0, centro_lat=0.0, centro_lon=0.0))
 
 
 @pytest.mark.asyncio

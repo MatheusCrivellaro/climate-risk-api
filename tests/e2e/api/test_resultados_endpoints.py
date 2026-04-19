@@ -125,9 +125,7 @@ async def test_get_resultados_paginacao(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get(
-        "/resultados", params={"limit": 2, "offset": 0}
-    )
+    resp = await cliente_api.get("/resultados", params={"limit": 2, "offset": 0})
     body = resp.json()
     assert body["total"] == 6
     assert len(body["items"]) == 2
@@ -139,9 +137,7 @@ async def test_get_resultados_raio_km_exige_centros(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get(
-        "/resultados", params={"raio_km": 100, "centro_lat": -23.5}
-    )
+    resp = await cliente_api.get("/resultados", params={"raio_km": 100, "centro_lat": -23.5})
     assert resp.status_code == 422
     body = resp.json()
     assert body["title"] == "Parâmetros inválidos"
@@ -196,9 +192,7 @@ async def test_get_agregados_count_global(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get(
-        "/resultados/agregados", params={"agregacao": "count"}
-    )
+    resp = await cliente_api.get("/resultados/agregados", params={"agregacao": "count"})
     body = resp.json()
     assert len(body["grupos"]) == 1
     assert body["grupos"][0]["valor"] == 6.0
@@ -210,9 +204,7 @@ async def test_get_agregados_agregacao_invalida_retorna_422(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get(
-        "/resultados/agregados", params={"agregacao": "soma"}
-    )
+    resp = await cliente_api.get("/resultados/agregados", params={"agregacao": "soma"})
     # Validação do FastAPI (pattern regex no Query) → 422 com detail de validação.
     assert resp.status_code == 422
 
@@ -223,9 +215,7 @@ async def test_get_agregados_agrupar_por_invalido_retorna_422(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get(
-        "/resultados/agregados", params={"agrupar_por": "xpto"}
-    )
+    resp = await cliente_api.get("/resultados/agregados", params={"agrupar_por": "xpto"})
     assert resp.status_code == 422
     body = resp.json()
     assert "agrupar_por" in body.get("detail", "").lower()

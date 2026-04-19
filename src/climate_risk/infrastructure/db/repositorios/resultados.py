@@ -223,9 +223,7 @@ class SQLAlchemyRepositorioResultados:
         resultado = await self._sessao.execute(stmt)
         return {int(row) for row in resultado.scalars().all() if row is not None}
 
-    def _aplicar_filtros_dto(
-        self, stmt: Any, filtros: FiltrosConsultaResultados
-    ) -> Any:
+    def _aplicar_filtros_dto(self, stmt: Any, filtros: FiltrosConsultaResultados) -> Any:
         """Variante do ``_aplicar_filtros`` que aceita o DTO do Slice 11.
 
         Diferenças-chave vs. ``_aplicar_filtros``:
@@ -478,11 +476,7 @@ class SQLAlchemyRepositorioResultados:
         return [str(v) for v in resultado.scalars().all() if v is not None]
 
     async def distinct_anos(self) -> list[int]:
-        stmt = (
-            select(ResultadoIndiceORM.ano)
-            .distinct()
-            .order_by(ResultadoIndiceORM.ano)
-        )
+        stmt = select(ResultadoIndiceORM.ano).distinct().order_by(ResultadoIndiceORM.ano)
         resultado = await self._sessao.execute(stmt)
         return [int(v) for v in resultado.scalars().all() if v is not None]
 
