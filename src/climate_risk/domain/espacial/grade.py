@@ -1,6 +1,7 @@
 """Utilidades de grade 2D para dados climáticos.
 
-Portado de ``legacy/gera_pontos_fornecedores.py`` conforme ADR-001.
+Portado do script legado ``gera_pontos_fornecedores.py`` conforme ADR-001
+(código legado removido na Slice 12).
 """
 
 from __future__ import annotations

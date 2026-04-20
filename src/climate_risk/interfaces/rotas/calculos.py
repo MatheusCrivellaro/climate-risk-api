@@ -103,14 +103,13 @@ def _traduzir_request_para_params(payload: CalculoPorPontosRequest) -> Parametro
         parametros_indices=parametros_indices,
         p95_baseline=baseline,
         p95_wet_thr=payload.parametros_indices.p95_wet_thr,
-        persistir=payload.persistir,
     )
 
 
 def _traduzir_request_para_params_async(
     payload: CalculoPorPontosRequest,
 ) -> ParametrosCriacaoExecucaoPontos:
-    """Versão assíncrona — sem ``persistir`` (o worker sempre persiste)."""
+    """Versão assíncrona — o worker sempre persiste via ProcessarPontosLote."""
     return ParametrosCriacaoExecucaoPontos(
         arquivo_nc=payload.arquivo_nc,
         cenario=payload.cenario,
@@ -170,7 +169,6 @@ def _traduzir_resultado_para_response(
         for r in resultado.resultados
     ]
     return CalculoPorPontosResponse(
-        execucao_id=resultado.execucao_id,
         cenario=resultado.cenario,
         variavel=resultado.variavel,
         total_pontos=total_pontos,

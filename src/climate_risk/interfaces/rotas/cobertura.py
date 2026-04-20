@@ -1,8 +1,9 @@
 """Rota ``POST /cobertura/fornecedores`` (Slice 9).
 
-Substitui o notebook ``legacy/locais_faltantes_fornecedores.ipynb``:
-cruza a lista de fornecedores (estruturada ou texto legado) com a tabela
-``resultado_indice`` para descobrir quem tem dados climáticos processados.
+Substitui o notebook legado ``locais_faltantes_fornecedores.ipynb``
+(removido na Slice 12): cruza a lista de fornecedores (estruturada ou
+texto legado) com a tabela ``resultado_indice`` para descobrir quem tem
+dados climáticos processados.
 """
 
 from __future__ import annotations

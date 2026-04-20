@@ -6,8 +6,9 @@ Usa os fixtures sintéticos em ``tests/fixtures/netcdf_mini/``:
 - ``cordex_sintetico_cftime.nc``: calendário ``360_day``, grade 2D (y, x).
 
 Os testes de paridade reimplementam inline as funções do legado
-(``legacy/gera_pontos_fornecedores.py``) — NÃO importam de ``legacy/``,
-seguindo o padrão já estabelecido em ``tests/integration/test_paridade_legacy.py``.
+(``gera_pontos_fornecedores.py``, código legado removido na Slice 12) como
+golden baseline permanente, seguindo o padrão já estabelecido em
+``tests/integration/test_paridade_legacy.py``.
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ ATOL = 1e-9
 
 # ---------------------------------------------------------------------------
 # Helpers legados copiados de gera_pontos_fornecedores.py (fonte primária
-# ADR-001). Cópia inline evita dependência estrutural com ``legacy/``.
+# ADR-001; código legado removido na Slice 12). Cópia inline serve como
+# golden baseline permanente para paridade bit-a-bit.
 # ---------------------------------------------------------------------------
 
 

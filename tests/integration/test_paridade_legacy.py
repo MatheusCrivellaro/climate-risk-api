@@ -1,13 +1,15 @@
 """Teste de regressão de paridade numérica com o código legado.
 
 Objetivo: garantir que o novo domínio (``calcular_indices_anuais``)
-reproduz bit-a-bit (dentro das tolerâncias acordadas) o comportamento de
-``legacy/gera_pontos_fornecedores.py`` para os mesmos inputs.
+reproduz bit-a-bit (dentro das tolerâncias acordadas) o comportamento do
+script legado original ``gera_pontos_fornecedores.py`` para os mesmos
+inputs.
 
 O teste reimplementa inline as funções relevantes do legado (copiadas
-do próprio arquivo legado) para evitar criar dependência estrutural com
-``legacy/``. A função legada é a fonte de verdade; qualquer divergência
-bloqueia o slice.
+do próprio arquivo legado antes de sua remoção na Slice 12). Funciona
+como *golden baseline* permanente, sem depender do diretório ``legacy/``
+(removido após a paridade ter sido validada no Marco M4). Qualquer
+divergência futura quebra a build.
 
 O fixture usado é ``tests/fixtures/netcdf_mini/cordex_sintetico_basico.nc``,
 que utiliza calendário padrão. O arquivo cftime NÃO é usado aqui porque o

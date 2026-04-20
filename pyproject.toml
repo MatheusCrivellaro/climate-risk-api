@@ -49,8 +49,8 @@ climate-risk-worker = "climate_risk.cli.worker:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/climate_risk"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
@@ -65,7 +65,7 @@ dev-dependencies = [
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
-extend-exclude = ["legacy", "migrations/versions"]
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]

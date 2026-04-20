@@ -1,11 +1,12 @@
 """Cálculo do limiar P95 por célula sobre o período de baseline.
 
-Portado de ``legacy/gera_pontos_fornecedores.py`` (função
+Portado do script legado ``gera_pontos_fornecedores.py`` (função
 ``compute_p95_grid``) conforme ADR-001. A versão de
-``legacy/cordex_pr_freq_intensity.py`` NÃO é usada porque contém o bug
+``cordex_pr_freq_intensity.py`` NÃO é usada porque contém o bug
 conhecido de incompatibilidade com calendários ``cftime`` (360_day) —
 ver histórico do Slice 0 e a baseline header-only em
-``tests/fixtures/baselines/sintetica/baseline_grade_cftime.csv``.
+``tests/fixtures/baselines/sintetica/baseline_grade_cftime.csv``. Código
+legado removido na Slice 12.
 """
 
 from __future__ import annotations

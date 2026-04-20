@@ -1,15 +1,17 @@
 """Gera arquivos .nc sintéticos e a baseline de regressão.
 
-Rodar manualmente UMA vez:
+Script one-shot executado manualmente durante o bootstrap do projeto
+(``uv run python scripts/gerar_baseline_sintetica.py``). Gera dois
+``.nc`` em ``tests/fixtures/netcdf_mini/`` e, originalmente, executava
+os scripts legados ``cordex_pr_freq_intensity.py`` e
+``gera_pontos_fornecedores.py`` contra eles para congelar os CSVs em
+``tests/fixtures/baselines/sintetica/``.
 
-    uv run python scripts/gerar_baseline_sintetica.py
-
-Gera dois ``.nc`` em ``tests/fixtures/netcdf_mini/`` e executa os scripts
-legados (``legacy/cordex_pr_freq_intensity.py`` e
-``legacy/gera_pontos_fornecedores.py``) contra eles, deixando os CSVs
-congelados em ``tests/fixtures/baselines/sintetica/``.
-
-Os CSVs e os .nc resultantes devem ser commitados no repositório.
+O código legado foi removido na Slice 12 após a paridade numérica
+bit-a-bit ter sido validada (Marco M4). Os CSVs e ``.nc`` ainda
+vivem em ``tests/fixtures/`` e continuam servindo como fonte de
+verdade para os testes; rodar este script sem o diretório ``legacy/``
+falhará ao chamar os subprocessos — é o comportamento esperado.
 """
 
 from __future__ import annotations

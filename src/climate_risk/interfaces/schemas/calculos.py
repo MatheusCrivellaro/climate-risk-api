@@ -75,10 +75,6 @@ class CalculoPorPontosRequest(BaseModel):
         default_factory=ParametrosIndicesEntrada,
         description="Parâmetros dos índices e do P95.",
     )
-    persistir: bool = Field(
-        default=False,
-        description="Se ``true``, grava Execucao + ResultadoIndice no banco.",
-    )
 
     model_config = {
         "json_schema_extra": {
@@ -94,7 +90,6 @@ class CalculoPorPontosRequest(BaseModel):
                     "heavy50": 50.0,
                     "p95_baseline": {"inicio": 2026, "fim": 2035},
                 },
-                "persistir": True,
             }
         }
     }
@@ -126,12 +121,13 @@ class PontoResultado(BaseModel):
 
 
 class CalculoPorPontosResponse(BaseModel):
-    """Corpo do ``200 OK`` do endpoint síncrono."""
+    """Corpo do ``200 OK`` do endpoint síncrono.
 
-    execucao_id: str | None = Field(
-        default=None,
-        description="ID da Execucao persistida; ``null`` quando ``persistir=false``.",
-    )
+    O endpoint síncrono apenas calcula e devolve os resultados; para
+    persistir, use o fluxo assíncrono (``202`` via
+    :class:`CalculoPontosAsyncResponse`) ou o ``POST /execucoes``.
+    """
+
     cenario: str
     variavel: str
     total_pontos: int = Field(..., ge=0, description="Quantidade de pontos recebidos.")

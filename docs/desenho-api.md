@@ -125,8 +125,7 @@
   "pontos": [
     { "lat": -23.55, "lon": -46.63, "identificador": "forn-001" }
   ],
-  "parametros_indices": { "freq_thr_mm": 20.0, "p95_wet_thr": 1.0 },
-  "persistir": true
+  "parametros_indices": { "freq_thr_mm": 20.0, "p95_wet_thr": 1.0 }
 }
 ```
 
@@ -327,7 +326,6 @@ climate-risk-api/
 │   ├── e2e/
 │   ├── fixtures/
 │   └── conftest.py
-├── legacy/              (codigo antigo de referencia)
 └── scripts/
 ```
 
@@ -378,7 +376,6 @@ sequenceDiagram
     participant App as CalcularIndicesPorPontos
     participant NC as LeitorNetCDF
     participant Calc as CalculadorIndices
-    participant DB as Banco
 
     C->>API: POST /calculos/pontos (<=100)
     API->>App: executar(params, pontos)
@@ -386,9 +383,6 @@ sequenceDiagram
     App->>Calc: p95_por_celula(baseline)
     loop Por ponto, por ano
         App->>Calc: indices_anuais(serie)
-    end
-    alt persistir=true
-        App->>DB: persistir
     end
     App-->>API: resultados
     API-->>C: 200 OK

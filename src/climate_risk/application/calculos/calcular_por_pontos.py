@@ -1,8 +1,14 @@
 """Caso de uso :class:`CalcularIndicesPorPontos` (UC-03 síncrono).
 
 Orquestra a leitura do NetCDF, o cálculo de P95 por célula, a amostragem da
-série diária em cada ponto, o cálculo dos índices anuais e, opcionalmente, a
-persistência de :class:`~climate_risk.domain.entidades.resultado.ResultadoIndice`.
+série diária em cada ponto e o cálculo dos índices anuais. É um caso de uso
+**puro**: apenas calcula e devolve :class:`ResultadoCalculo`; não cria
+:class:`~climate_risk.domain.entidades.execucao.Execucao` nem persiste
+:class:`~climate_risk.domain.entidades.resultado.ResultadoIndice`.
+
+Quem quiser persistir (o fluxo assíncrono em
+:mod:`climate_risk.application.calculos.processar_pontos_lote` ou a rota
+síncrona, no futuro) deve orquestrar os repositórios na camada chamadora.
 
 ADR-005: esta camada depende **apenas** de ``domain``. Nenhum import de
 FastAPI, Pydantic, SQLAlchemy ou ``xarray`` deve aparecer neste módulo.
@@ -16,10 +22,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from climate_risk.core.ids import gerar_id
-from climate_risk.core.tempo import utc_now
-from climate_risk.domain.entidades.execucao import Execucao, StatusExecucao
-from climate_risk.domain.entidades.resultado import ResultadoIndice
 from climate_risk.domain.espacial.grade import indice_mais_proximo
 from climate_risk.domain.indices.calculadora import (
     IndicesAnuais,
@@ -28,10 +30,6 @@ from climate_risk.domain.indices.calculadora import (
 )
 from climate_risk.domain.indices.p95 import PeriodoBaseline, calcular_p95_por_celula_numpy
 from climate_risk.domain.portas.leitor_netcdf import LeitorNetCDF
-from climate_risk.domain.portas.repositorios import (
-    RepositorioExecucoes,
-    RepositorioResultados,
-)
 
 __all__ = [
     "UNIDADES_POR_INDICE",
@@ -77,9 +75,9 @@ class ParametrosCalculo:
 
     Atributos:
         arquivo_nc: Caminho do ``.nc`` de origem (passado ao leitor).
-        cenario: Rótulo do cenário (ex.: ``"rcp45"``). Usado apenas para
-            preencher :class:`Execucao`; o leitor infere o cenário real do
-            arquivo.
+        cenario: Rótulo do cenário (ex.: ``"rcp45"``). O leitor infere o
+            cenário real do arquivo; este valor serve de fallback quando
+            o leitor devolve ``"unknown"``.
         variavel: Nome da variável climática (MVP: ``"pr"``).
         pontos: Lista de pontos a avaliar. Cardinalidade deve ter sido
             validada pela camada HTTP (limite síncrono).
@@ -87,8 +85,6 @@ class ParametrosCalculo:
         p95_baseline: Intervalo fechado de anos para o P95; ``None``
             desativa o cálculo do P95.
         p95_wet_thr: Limiar de "dia chuvoso" para o P95 (mm/dia).
-        persistir: Quando ``True``, cria :class:`Execucao` e grava
-            :class:`ResultadoIndice` via repositórios.
     """
 
     arquivo_nc: str
@@ -98,7 +94,6 @@ class ParametrosCalculo:
     parametros_indices: ParametrosIndices
     p95_baseline: PeriodoBaseline | None
     p95_wet_thr: float
-    persistir: bool
 
 
 @dataclass(frozen=True)
@@ -118,7 +113,6 @@ class ResultadoPonto:
 class ResultadoCalculo:
     """Retorno agregado do caso de uso."""
 
-    execucao_id: str | None
     cenario: str
     variavel: str
     resultados: list[ResultadoPonto]
@@ -127,23 +121,13 @@ class ResultadoCalculo:
 class CalcularIndicesPorPontos:
     """Orquestrador do UC-03 síncrono.
 
-    Dependências (portas de ``domain``):
-
-    - :class:`LeitorNetCDF` para abrir o arquivo e devolver
-      :class:`DadosClimaticos`.
-    - :class:`RepositorioExecucoes` / :class:`RepositorioResultados` para
-      persistência opcional (``persistir=True``).
+    Depende apenas de :class:`LeitorNetCDF` (porta de ``domain``). Não
+    toca repositórios: a responsabilidade de persistir pertence a quem
+    invoca o caso de uso.
     """
 
-    def __init__(
-        self,
-        leitor_netcdf: LeitorNetCDF,
-        repositorio_execucoes: RepositorioExecucoes,
-        repositorio_resultados: RepositorioResultados,
-    ) -> None:
+    def __init__(self, leitor_netcdf: LeitorNetCDF) -> None:
         self._leitor = leitor_netcdf
-        self._repo_execucoes = repositorio_execucoes
-        self._repo_resultados = repositorio_resultados
 
     async def executar(self, params: ParametrosCalculo) -> ResultadoCalculo:
         """Executa o fluxo completo. Ver :class:`ParametrosCalculo`."""
@@ -187,75 +171,11 @@ class CalcularIndicesPorPontos:
                     )
                 )
 
-        execucao_id: str | None = None
-        if params.persistir:
-            execucao_id = await self._persistir(params, resultados)
-
         return ResultadoCalculo(
-            execucao_id=execucao_id,
             cenario=dados.cenario if dados.cenario != "unknown" else params.cenario,
             variavel=params.variavel,
             resultados=resultados,
         )
-
-    async def _persistir(
-        self,
-        params: ParametrosCalculo,
-        resultados: list[ResultadoPonto],
-    ) -> str:
-        """Cria :class:`Execucao` e grava :class:`ResultadoIndice` em lote."""
-        agora = utc_now()
-        execucao = Execucao(
-            id=gerar_id("exec"),
-            cenario=params.cenario,
-            variavel=params.variavel,
-            arquivo_origem=params.arquivo_nc,
-            tipo="pontos",
-            parametros={
-                "freq_thr_mm": params.parametros_indices.freq_thr_mm,
-                "heavy_thresholds": list(params.parametros_indices.heavy_thresholds),
-                "p95_wet_thr": params.p95_wet_thr,
-                "p95_baseline": (
-                    {
-                        "inicio": params.p95_baseline.inicio,
-                        "fim": params.p95_baseline.fim,
-                    }
-                    if params.p95_baseline is not None
-                    else None
-                ),
-                "total_pontos": len(params.pontos),
-            },
-            status=StatusExecucao.COMPLETED,
-            criado_em=agora,
-            concluido_em=agora,
-            job_id=None,
-        )
-        await self._repo_execucoes.salvar(execucao)
-
-        registros: list[ResultadoIndice] = []
-        for ponto in resultados:
-            indices_por_nome = _achatar_indices(ponto.indices)
-            for nome_indice, valor_bruto in indices_por_nome.items():
-                registros.append(
-                    ResultadoIndice(
-                        id=gerar_id("res"),
-                        execucao_id=execucao.id,
-                        lat=ponto.lat_grid,
-                        lon=ponto.lon_grid,
-                        lat_input=ponto.lat_input,
-                        lon_input=ponto.lon_input,
-                        ano=ponto.ano,
-                        nome_indice=nome_indice,
-                        valor=_nan_para_none(valor_bruto),
-                        unidade=UNIDADES_POR_INDICE[nome_indice],
-                        municipio_id=None,
-                    )
-                )
-
-        if registros:
-            await self._repo_resultados.salvar_lote(registros)
-
-        return execucao.id
 
 
 def _p95_para_pixel(p95_grid: np.ndarray | None, iy: int, ix: int) -> float | None:
@@ -264,22 +184,3 @@ def _p95_para_pixel(p95_grid: np.ndarray | None, iy: int, ix: int) -> float | No
         return None
     valor = float(p95_grid[iy, ix])
     return valor if math.isfinite(valor) else None
-
-
-def _achatar_indices(indices: IndicesAnuais) -> dict[str, float]:
-    """Converte :class:`IndicesAnuais` em ``{nome_indice: valor}``."""
-    return {
-        "wet_days": float(indices.wet_days),
-        "sdii": indices.sdii,
-        "rx1day": indices.rx1day,
-        "rx5day": indices.rx5day,
-        "r20mm": float(indices.r20mm),
-        "r50mm": float(indices.r50mm),
-        "r95ptot_mm": indices.r95ptot_mm,
-        "r95ptot_frac": indices.r95ptot_frac,
-    }
-
-
-def _nan_para_none(valor: float) -> float | None:
-    """Traduz ``NaN`` para ``None`` antes da persistência (coluna REAL nullable)."""
-    return None if math.isnan(valor) else float(valor)

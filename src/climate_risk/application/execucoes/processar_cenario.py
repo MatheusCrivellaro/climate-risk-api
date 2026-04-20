@@ -7,7 +7,8 @@ Executado **pelo Worker**, consumindo um :class:`Job` do tipo
 2. Cálculo do P95 por célula (opcional).
 3. Iteração por célula ``(iy, ix)`` dentro do bbox — **outer=iy,
    inner=ix** — preservando paridade numérica célula-a-célula com o
-   legado ``legacy/cordex_pr_freq_intensity.py`` (ver ADR-001).
+   script legado ``cordex_pr_freq_intensity.py`` (ver ADR-001; código
+   legado removido na Slice 12 após validação bit-a-bit).
 4. Cálculo dos índices anuais por (célula, ano).
 5. Persistência em lotes de 1000 :class:`ResultadoIndice` via
    :class:`RepositorioResultados`.

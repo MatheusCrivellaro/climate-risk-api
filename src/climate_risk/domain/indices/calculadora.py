@@ -1,9 +1,9 @@
 """Cálculo de índices anuais de precipitação sobre séries diárias.
 
-Portado de ``legacy/gera_pontos_fornecedores.py`` (função
+Portado do script legado ``gera_pontos_fornecedores.py`` (função
 ``annual_indices_for_series``) conforme ADR-001. Paridade bit-a-bit
 preservada — inclusive o tratamento de NaN por zero-fill e o uso de
-``np.float32`` internamente.
+``np.float32`` internamente. Código legado removido na Slice 12.
 """
 
 from __future__ import annotations

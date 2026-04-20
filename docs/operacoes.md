@@ -66,12 +66,15 @@ Definida em ADR-004:
 O Worker é quem aplica a política; a `FilaJobs` apenas executa o que lhe
 pedem (ver docstring de `FilaJobs.concluir_com_falha`).
 
-## Tipos de job suportados (Slice 5)
+## Tipos de job suportados
 
-- `noop` — utilitário de diagnóstico/smoke-test. Aceita payload
+- `noop` (Slice 5) — utilitário de diagnóstico/smoke-test. Aceita payload
   `{"duracao_segundos": float, "falhar": bool, "mensagem_erro": str}`.
-
-O tipo `processar_cordex` entra no Slice 6.
+- `processar_cordex` (Slice 6) — enfileirado por `POST /execucoes`;
+  processa um cenário CORDEX completo em grade e persiste os resultados.
+- `processar_pontos_lote` (Slice 7) — enfileirado por
+  `POST /execucoes/pontos`; mesmo cálculo do endpoint síncrono, porém
+  para lotes maiores que o limite de 100 pontos.
 
 ## Limitações conhecidas (ADR-004)
 
