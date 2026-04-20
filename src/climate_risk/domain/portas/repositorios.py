@@ -24,6 +24,11 @@ from climate_risk.domain.entidades import (
     ResultadoIndice,
 )
 from climate_risk.domain.espacial.bbox import BoundingBox
+from climate_risk.domain.portas.filtros_resultados import (
+    FiltrosAgregacaoResultados,
+    FiltrosConsultaResultados,
+    GrupoAgregadoRaw,
+)
 
 
 class RepositorioMunicipios(Protocol):
@@ -164,6 +169,59 @@ class RepositorioResultados(Protocol):
         Resultados com ``municipio_id IS NULL`` (processados por BBOX sem
         geocodificação) são ignorados — só entram linhas com ID explícito.
         """
+        ...
+
+    async def consultar(
+        self,
+        filtros: FiltrosConsultaResultados,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ResultadoIndice]:
+        """Retorna resultados aplicando o conjunto rico de filtros (Slice 11).
+
+        Diferente de :meth:`listar` (kwargs legados do Slice 9), aceita um
+        DTO frozen que carrega também ``ano`` exato, ``nomes_indices`` em
+        ``IN(...)`` e BBOX com cruzamento de antimeridiano.
+        """
+        ...
+
+    async def contar_por_filtros(self, filtros: FiltrosConsultaResultados) -> int:
+        """``COUNT(*)`` sob as mesmas condições de :meth:`consultar`."""
+        ...
+
+    async def agregar(
+        self, filtros_agregacao: FiltrosAgregacaoResultados
+    ) -> list[GrupoAgregadoRaw]:
+        """Aplica ``GROUP BY`` + função de agregação sobre ``valor``.
+
+        Percentis (``"p50"``, ``"p95"``) são calculados em Python (SQLite
+        não oferece ``PERCENTILE_CONT``). Os demais (``media``, ``min``,
+        ``max``, ``count``) são resolvidos em SQL.
+        """
+        ...
+
+    async def distinct_cenarios(self) -> list[str]:
+        """Cenários distintos presentes em execuções com resultados."""
+        ...
+
+    async def distinct_anos(self) -> list[int]:
+        """Anos distintos em ``resultado_indice.ano`` (ordem crescente)."""
+        ...
+
+    async def distinct_variaveis(self) -> list[str]:
+        """Variáveis climáticas distintas em execuções com resultados."""
+        ...
+
+    async def distinct_nomes_indices(self) -> list[str]:
+        """Nomes de índice distintos em ``resultado_indice.nome_indice``."""
+        ...
+
+    async def contar_execucoes_com_resultados(self) -> int:
+        """Quantidade de execuções distintas que produziram ao menos um resultado."""
+        ...
+
+    async def contar_resultados(self) -> int:
+        """``COUNT(*)`` total de ``resultado_indice`` (sem filtros)."""
         ...
 
 

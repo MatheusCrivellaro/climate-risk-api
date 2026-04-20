@@ -17,6 +17,7 @@ from climate_risk.interfaces.rotas import (
     geocoding,
     health,
     jobs,
+    resultados,
 )
 
 VERSAO_API = "0.0.1"
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(geocoding.router)
     app.include_router(cobertura.router)
     app.include_router(fornecedores.router)
+    app.include_router(resultados.router)
     app.include_router(admin.router)
 
     return app
