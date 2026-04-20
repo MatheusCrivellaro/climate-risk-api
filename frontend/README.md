@@ -54,11 +54,27 @@ src/
 ├── components/       Componentes reutilizáveis (Button, Table, ...)
 ├── features/         Blocos específicos de cada feature
 ├── pages/            Uma por rota
-├── lib/              Utils (formatters, helpers)
-├── types/            Tipos de domínio do frontend
+├── lib/              Utils (formatters, helpers, CSV)
+├── test/             Setup do Vitest
 ├── App.tsx
 └── main.tsx
 ```
+
+## Páginas
+
+| Rota                  | Página            | Função                                         |
+| --------------------- | ----------------- | ---------------------------------------------- |
+| `/`                   | Dashboard         | Contadores + jobs por status + últimas runs    |
+| `/execucoes`          | ExecucoesList     | Listagem paginada com filtros                  |
+| `/execucoes/nova`     | ExecucoesNova     | Form de criação (BBOX, baseline P95)           |
+| `/execucoes/:id`      | ExecucaoDetalhe   | Detalhe com polling e cancelamento             |
+| `/jobs`               | JobsList          | Jobs com filtros + retry                       |
+| `/calculos/pontos`    | CalculosPontos    | Cálculo por pontos sync/async                  |
+| `/resultados`         | Resultados        | Consulta com filtros URL-persistidos + charts  |
+| `/fornecedores`       | Fornecedores      | CRUD + import CSV/XLSX                         |
+| `/geocodificacao`     | Geocodificacao    | CIDADE/UF → IBGE + lat/lon                     |
+| `/cobertura`          | Cobertura         | Fornecedores com/sem cobertura climática       |
+| `/admin`              | Admin             | Contadores + refresh catálogo IBGE             |
 
 Regras:
 

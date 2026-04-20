@@ -17,15 +17,15 @@ v6, Recharts, openapi-typescript. Ver `package.json` para pinos exatos.
 ## Estado dos slices
 
 - [x] **Slice 0 — Setup** (Vite + Tailwind + tooling + CLAUDE.md + README)
-- [ ] Slice 1 — API client + tipos gerados
-- [ ] Slice 2 — Componentes base + layout
-- [ ] Slice 3 — Dashboard
-- [ ] Slice 4 — Execuções
-- [ ] Slice 5 — Jobs + cálculos por pontos
-- [ ] Slice 6 — Resultados + agregações
+- [x] Slice 1 — API client + tipos gerados
+- [x] Slice 2 — Componentes base + layout
+- [x] Slice 3 — Dashboard
+- [x] Slice 4 — Execuções
+- [x] Slice 5 — Jobs + cálculos por pontos
+- [x] Slice 6 — Resultados + agregações
 - [x] Slice 7 — Fornecedores
 - [x] Slice 8 — Geocodificação + cobertura
-- [ ] Slice 9 — Polimento + testes + docs
+- [x] Slice 9 — Polimento + testes + docs
 
 ## Decisões tomadas
 
@@ -38,6 +38,12 @@ v6, Recharts, openapi-typescript. Ver `package.json` para pinos exatos.
   no `index.css`.
 - `strict: true`, `noUncheckedIndexedAccess: true`, `noImplicitOverride: true`
   em `tsconfig.app.json`.
+- `frontend/.gitignore` anula o `lib/` do `.gitignore` raiz (que é padrão
+  Python), senão `frontend/src/lib/` não é versionado.
+- Testes Vitest + Testing Library focados em utilitários puros
+  (`parseCidadeUfText`, `parsePontosCSV`, `toCSV`) + smoke de
+  `Button` e `Sidebar`. Páginas com efeitos de rede ficam fora da
+  cobertura automatizada por enquanto.
 
 ## Como retomar
 
