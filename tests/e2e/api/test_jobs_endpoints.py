@@ -56,14 +56,14 @@ async def test_listar_jobs(
     await _inserir_job(async_sessionmaker_, status=StatusJob.PENDING)
     await _inserir_job(async_sessionmaker_, status=StatusJob.COMPLETED)
 
-    resposta = await cliente_api.get("/jobs")
+    resposta = await cliente_api.get("/api/jobs")
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
     assert corpo["total"] == 2
     assert len(corpo["items"]) == 2
 
     # Filtro por status.
-    resposta_filtrada = await cliente_api.get("/jobs", params={"status": "pending"})
+    resposta_filtrada = await cliente_api.get("/api/jobs", params={"status": "pending"})
     assert resposta_filtrada.status_code == 200
     filtrado = resposta_filtrada.json()
     assert filtrado["total"] == 1
@@ -80,7 +80,7 @@ async def test_obter_job_por_id(
 ) -> None:
     job_id = await _inserir_job(async_sessionmaker_)
 
-    resposta = await cliente_api.get(f"/jobs/{job_id}")
+    resposta = await cliente_api.get(f"/api/jobs/{job_id}")
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
     assert corpo["id"] == job_id
@@ -90,7 +90,7 @@ async def test_obter_job_por_id(
 
 @pytest.mark.asyncio
 async def test_obter_job_inexistente_retorna_404(cliente_api: AsyncClient) -> None:
-    resposta = await cliente_api.get("/jobs/job_fantasma")
+    resposta = await cliente_api.get("/api/jobs/job_fantasma")
     assert resposta.status_code == 404
     corpo = resposta.json()
     assert corpo["type"].endswith("/job-nao-encontrado")
@@ -108,7 +108,7 @@ async def test_retry_job_failed_volta_para_pending(
 ) -> None:
     job_id = await _inserir_job(async_sessionmaker_, status=StatusJob.FAILED, erro="boom")
 
-    resposta = await cliente_api.post(f"/jobs/{job_id}/retry")
+    resposta = await cliente_api.post(f"/api/jobs/{job_id}/retry")
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
     assert corpo["status"] == "pending"
@@ -123,7 +123,7 @@ async def test_retry_job_pending_retorna_409(
 ) -> None:
     job_id = await _inserir_job(async_sessionmaker_, status=StatusJob.PENDING)
 
-    resposta = await cliente_api.post(f"/jobs/{job_id}/retry")
+    resposta = await cliente_api.post(f"/api/jobs/{job_id}/retry")
     assert resposta.status_code == 409
     corpo = resposta.json()
     assert corpo["type"].endswith("/job-estado-invalido")
@@ -132,6 +132,6 @@ async def test_retry_job_pending_retorna_409(
 
 @pytest.mark.asyncio
 async def test_retry_job_inexistente_retorna_404(cliente_api: AsyncClient) -> None:
-    resposta = await cliente_api.post("/jobs/job_fantasma/retry")
+    resposta = await cliente_api.post("/api/jobs/job_fantasma/retry")
     assert resposta.status_code == 404
     assert resposta.json()["type"].endswith("/job-nao-encontrado")

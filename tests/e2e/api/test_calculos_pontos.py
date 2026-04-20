@@ -45,7 +45,7 @@ def _corpo_basico(
 )
 @pytest.mark.asyncio
 async def test_happy_path_sem_persistencia(cliente_api: AsyncClient) -> None:
-    resposta = await cliente_api.post("/calculos/pontos", json=_corpo_basico())
+    resposta = await cliente_api.post("/api/calculos/pontos", json=_corpo_basico())
 
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
@@ -71,7 +71,7 @@ async def test_happy_path_sem_persistencia(cliente_api: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_arquivo_nc_inexistente_retorna_404(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.post(
-        "/calculos/pontos", json=_corpo_basico(arquivo_nc="/nao/existe.nc")
+        "/api/calculos/pontos", json=_corpo_basico(arquivo_nc="/nao/existe.nc")
     )
     assert resposta.status_code == 404
     corpo = resposta.json()
@@ -87,7 +87,7 @@ async def test_arquivo_nc_inexistente_retorna_404(cliente_api: AsyncClient) -> N
 @pytest.mark.asyncio
 async def test_variavel_ausente_retorna_422(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.post(
-        "/calculos/pontos", json=_corpo_basico(variavel="variavel_inexistente")
+        "/api/calculos/pontos", json=_corpo_basico(variavel="variavel_inexistente")
     )
     assert resposta.status_code == 422
     corpo = resposta.json()
@@ -98,7 +98,7 @@ async def test_variavel_ausente_retorna_422(cliente_api: AsyncClient) -> None:
 async def test_payload_invalido_retorna_422_pydantic(cliente_api: AsyncClient) -> None:
     # Latitude fora do intervalo — o próprio Pydantic rejeita antes do caso de uso.
     resposta = await cliente_api.post(
-        "/calculos/pontos",
+        "/api/calculos/pontos",
         json=_corpo_basico(pontos=[{"lat": 999.0, "lon": -46.5}]),
     )
     assert resposta.status_code == 422  # FastAPI/Pydantic default (RequestValidationError)

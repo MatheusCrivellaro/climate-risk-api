@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from climate_risk.core.config import get_settings
 from climate_risk.core.logging import configure_logging
@@ -41,15 +41,17 @@ def create_app() -> FastAPI:
     app.add_middleware(ErroRfc7807Middleware)
     app.add_middleware(CorrelationIdMiddleware)
 
-    app.include_router(health.router)
-    app.include_router(calculos.router)
-    app.include_router(execucoes.router)
-    app.include_router(jobs.router)
-    app.include_router(geocoding.router)
-    app.include_router(cobertura.router)
-    app.include_router(fornecedores.router)
-    app.include_router(resultados.router)
-    app.include_router(admin.router)
+    api = APIRouter(prefix="/api")
+    api.include_router(health.router)
+    api.include_router(calculos.router)
+    api.include_router(execucoes.router)
+    api.include_router(jobs.router)
+    api.include_router(geocoding.router)
+    api.include_router(cobertura.router)
+    api.include_router(fornecedores.router)
+    api.include_router(resultados.router)
+    api.include_router(admin.router)
+    app.include_router(api)
 
     return app
 

@@ -187,8 +187,8 @@ def _traduzir_criacao_async_para_response(
         total_pontos=resultado.total_pontos,
         criado_em=resultado.criado_em.isoformat(),
         links={
-            "self": f"/execucoes/{resultado.execucao_id}",
-            "job": f"/jobs/{resultado.job_id}",
+            "self": f"/api/execucoes/{resultado.execucao_id}",
+            "job": f"/api/jobs/{resultado.job_id}",
         },
     )
 

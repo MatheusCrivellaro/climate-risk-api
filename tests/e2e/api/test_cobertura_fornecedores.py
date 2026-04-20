@@ -160,7 +160,7 @@ async def cliente_cobertura(
 @pytest.mark.asyncio
 async def test_cobertura_estruturada(cliente_cobertura: AsyncClient) -> None:
     resposta = await cliente_cobertura.post(
-        "/cobertura/fornecedores",
+        "/api/cobertura/fornecedores",
         json={
             "fornecedores": [
                 {"identificador": "f1", "cidade": "São Paulo", "uf": "SP"},
@@ -184,7 +184,7 @@ async def test_cobertura_estruturada(cliente_cobertura: AsyncClient) -> None:
 async def test_cobertura_texto_legacy(cliente_cobertura: AsyncClient) -> None:
     """Formato idêntico ao notebook legacy: CIDADE/UF por linha."""
     resposta = await cliente_cobertura.post(
-        "/cobertura/fornecedores",
+        "/api/cobertura/fornecedores",
         json={
             "texto_legacy": (
                 "São Paulo/SP\n"
@@ -206,14 +206,14 @@ async def test_cobertura_texto_legacy(cliente_cobertura: AsyncClient) -> None:
 async def test_cobertura_sem_fornecedores_nem_texto_422(
     cliente_cobertura: AsyncClient,
 ) -> None:
-    resposta = await cliente_cobertura.post("/cobertura/fornecedores", json={})
+    resposta = await cliente_cobertura.post("/api/cobertura/fornecedores", json={})
     assert resposta.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_cobertura_ambos_fornecidos_422(cliente_cobertura: AsyncClient) -> None:
     resposta = await cliente_cobertura.post(
-        "/cobertura/fornecedores",
+        "/api/cobertura/fornecedores",
         json={
             "fornecedores": [{"identificador": "x", "cidade": "São Paulo", "uf": "SP"}],
             "texto_legacy": "Rio de Janeiro/RJ",
