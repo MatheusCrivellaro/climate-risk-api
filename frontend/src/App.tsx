@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/features/layout/AppLayout';
+import DashboardPage from '@/pages/Dashboard';
 import NotFound from '@/pages/NotFound';
 import { Placeholder } from '@/pages/Placeholder';
 
@@ -7,7 +8,7 @@ export default function App() {
   return (
     <AppLayout>
       <Routes>
-        <Route path="/" element={<Placeholder title="Dashboard" />} />
+        <Route path="/" element={<DashboardPage />} />
         <Route
           path="/execucoes"
           element={<Placeholder title="Execuções" breadcrumbs={[{ label: 'Execuções' }]} />}
