@@ -23,7 +23,7 @@ v6, Recharts, openapi-typescript. Ver `package.json` para pinos exatos.
 - [ ] Slice 4 — Execuções
 - [ ] Slice 5 — Jobs + cálculos por pontos
 - [ ] Slice 6 — Resultados + agregações
-- [ ] Slice 7 — Fornecedores
+- [x] Slice 7 — Fornecedores
 - [ ] Slice 8 — Geocodificação + cobertura
 - [ ] Slice 9 — Polimento + testes + docs
 

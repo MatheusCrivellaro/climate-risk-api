@@ -5,6 +5,7 @@ import DashboardPage from '@/pages/Dashboard';
 import ExecucaoDetalhePage from '@/pages/ExecucaoDetalhe';
 import ExecucoesListPage from '@/pages/ExecucoesList';
 import ExecucoesNovaPage from '@/pages/ExecucoesNova';
+import FornecedoresPage from '@/pages/Fornecedores';
 import JobsListPage from '@/pages/JobsList';
 import NotFound from '@/pages/NotFound';
 import { Placeholder } from '@/pages/Placeholder';
@@ -21,10 +22,7 @@ export default function App() {
         <Route path="/jobs" element={<JobsListPage />} />
         <Route path="/calculos/pontos" element={<CalculosPontosPage />} />
         <Route path="/resultados" element={<ResultadosPage />} />
-        <Route
-          path="/fornecedores"
-          element={<Placeholder title="Fornecedores" breadcrumbs={[{ label: 'Fornecedores' }]} />}
-        />
+        <Route path="/fornecedores" element={<FornecedoresPage />} />
         <Route
           path="/geocodificacao"
           element={<Placeholder title="Geocodificação" breadcrumbs={[{ label: 'Geocodificação' }]} />}
