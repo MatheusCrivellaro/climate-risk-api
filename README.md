@@ -51,22 +51,111 @@ uv run climate-risk-worker
 
 ## Endpoints (visão rápida)
 
-Swagger/OpenAPI completo em `/docs`.
+Swagger/OpenAPI completo em `/docs`. Todas as rotas da API ficam sob o
+prefixo `/api/` (o root `/` é reservado para quando o frontend estiver
+montado em `/app/`).
 
 | Grupo | Endpoints |
 |---|---|
-| Health | `GET /health` (liveness), `GET /health/ready` (banco + migrações `head`). |
-| Cálculo síncrono | `POST /calculos/pontos` — até 100 pontos; pura, não persiste. |
-| Execuções assíncronas | `POST /execucoes` (CORDEX em grade), `POST /execucoes/pontos` (lote grande de pontos), `GET /execucoes`, `GET /execucoes/{id}`, `DELETE /execucoes/{id}`. |
-| Jobs (fila) | `GET /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/retry`. |
-| Resultados | `GET /resultados`, `GET /resultados/agregados`, `GET /resultados/stats`. |
-| Geocodificação | `POST /localizacoes/geocodificar`, `POST /localizacoes/pontos`. |
-| Fornecedores | `POST/GET/DELETE /fornecedores`, `POST /fornecedores/importar`. |
-| Cobertura | `POST /cobertura/fornecedores`. |
-| Admin | `POST /admin/ibge/refresh`, `GET /admin/stats`. |
+| Health | `GET /api/health` (liveness), `GET /api/health/ready` (banco + migrações `head`). |
+| Cálculo síncrono | `POST /api/calculos/pontos` — até 100 pontos; pura, não persiste. |
+| Execuções assíncronas | `POST /api/execucoes` (CORDEX em grade), `POST /api/execucoes/pontos` (lote grande de pontos), `GET /api/execucoes`, `GET /api/execucoes/{id}`, `DELETE /api/execucoes/{id}`. |
+| Jobs (fila) | `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/retry`. |
+| Resultados | `GET /api/resultados`, `GET /api/resultados/agregados`, `GET /api/resultados/stats`. |
+| Geocodificação | `POST /api/localizacoes/geocodificar`, `POST /api/localizacoes/pontos`. |
+| Fornecedores | `POST/GET/DELETE /api/fornecedores`, `POST /api/fornecedores/importar`. |
+| Cobertura | `POST /api/cobertura/fornecedores`. |
+| Admin | `POST /api/admin/ibge/refresh`, `GET /api/admin/stats`. |
 
 Erros seguem RFC 7807 (`application/problem+json`) — ver
 `docs/desenho-api.md` para a tabela completa de códigos.
+
+## Frontend
+
+O projeto convive com um frontend React/Vite/TypeScript em `frontend/`.
+Backend e frontend compartilham o mesmo repositório (monorepo simples) e,
+em produção, a mesma origem — o FastAPI serve o build estático em `/app/`
+e as rotas da API vivem em `/api/`.
+
+### Estrutura
+
+```
+climate-risk-api/
+├── src/climate_risk/        Backend (FastAPI + worker)
+├── tests/                   Testes Python (pytest)
+├── frontend/                Frontend (React + Vite)
+│   ├── src/                 Código TypeScript
+│   ├── dist/                Build estático (gerado, não versionado)
+│   └── package.json
+├── pyproject.toml
+└── README.md
+```
+
+### Modo dev (três terminais)
+
+Recomendado para desenvolvimento diário. Permite HMR do Vite sem reiniciar
+nada no backend.
+
+```bash
+# Terminal 1 — API em http://localhost:8000
+uv run climate-risk-api
+
+# Terminal 2 — worker de jobs
+uv run climate-risk-worker
+
+# Terminal 3 — frontend em http://localhost:5173
+cd frontend
+pnpm install           # apenas uma vez
+pnpm dev
+```
+
+O Vite dev server faz proxy de `/api` para `http://localhost:8000`, então
+o frontend sempre consome `/api/...` com mesma-origem e não há CORS.
+
+Abra `http://localhost:5173/app/` no browser. O Swagger continua em
+`http://localhost:8000/docs`.
+
+### Modo demo integrada (build + backend)
+
+Útil para reproduzir o comportamento de produção localmente (um único
+processo servindo tudo).
+
+```bash
+# 1. Gerar o build estático do frontend.
+cd frontend
+pnpm install           # apenas uma vez
+pnpm build             # cria frontend/dist/
+cd ..
+
+# 2. Subir o backend (que detecta frontend/dist/ e monta /app/).
+uv run climate-risk-api
+```
+
+URLs relevantes:
+
+| URL                               | O que responde                                |
+| --------------------------------- | --------------------------------------------- |
+| `http://localhost:8000/app/`      | Shell do frontend (React Router toma dali).   |
+| `http://localhost:8000/api/...`   | Rotas da API.                                 |
+| `http://localhost:8000/docs`      | Swagger UI.                                   |
+| `http://localhost:8000/openapi.json` | Contrato OpenAPI cru (fonte dos tipos).    |
+
+Se `frontend/dist/` não existir quando o backend subir, `/app/*` responde
+503 com um HTML explicando como rodar o build.
+
+### Regerando tipos quando o OpenAPI muda
+
+O frontend consome `schema.d.ts` gerado a partir do OpenAPI do backend.
+Quando rotas ou schemas mudarem:
+
+```bash
+# Com o backend rodando em http://localhost:8000:
+cd frontend
+pnpm gen:types
+```
+
+O script grava `frontend/src/api/schema.d.ts`. Commite junto com a
+mudança do backend para manter frontend e contrato em sincronia.
 
 ## Testes e qualidade
 
@@ -84,6 +173,15 @@ Gate de cobertura: **≥90%** nas linhas de `src/climate_risk`. Testes que
 dependem de fixtures pesadas (como o shapefile IBGE) ficam marcados com
 `@pytest.mark.shapefile` e são pulados automaticamente quando o fixture
 não está presente.
+
+Checks do frontend (dentro de `frontend/`):
+
+```bash
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # eslint
+pnpm test         # vitest (modo run)
+pnpm build        # build de produção
+```
 
 ## Documentação
 
