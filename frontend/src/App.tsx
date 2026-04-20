@@ -1,9 +1,11 @@
 import { Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/features/layout/AppLayout';
+import CalculosPontosPage from '@/pages/CalculosPontos';
 import DashboardPage from '@/pages/Dashboard';
 import ExecucaoDetalhePage from '@/pages/ExecucaoDetalhe';
 import ExecucoesListPage from '@/pages/ExecucoesList';
 import ExecucoesNovaPage from '@/pages/ExecucoesNova';
+import JobsListPage from '@/pages/JobsList';
 import NotFound from '@/pages/NotFound';
 import { Placeholder } from '@/pages/Placeholder';
 
@@ -15,11 +17,8 @@ export default function App() {
         <Route path="/execucoes" element={<ExecucoesListPage />} />
         <Route path="/execucoes/nova" element={<ExecucoesNovaPage />} />
         <Route path="/execucoes/:id" element={<ExecucaoDetalhePage />} />
-        <Route path="/jobs" element={<Placeholder title="Jobs" breadcrumbs={[{ label: 'Jobs' }]} />} />
-        <Route
-          path="/calculos/pontos"
-          element={<Placeholder title="Cálculo por pontos" breadcrumbs={[{ label: 'Cálculos' }]} />}
-        />
+        <Route path="/jobs" element={<JobsListPage />} />
+        <Route path="/calculos/pontos" element={<CalculosPontosPage />} />
         <Route
           path="/resultados"
           element={<Placeholder title="Resultados" breadcrumbs={[{ label: 'Resultados' }]} />}
