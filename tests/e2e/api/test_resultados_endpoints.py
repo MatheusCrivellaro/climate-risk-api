@@ -87,7 +87,7 @@ async def test_get_resultados_lista_todos_por_padrao(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados")
+    resp = await cliente_api.get("/api/resultados")
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] == 6
@@ -100,7 +100,7 @@ async def test_get_resultados_filtra_por_cenario(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados", params={"cenario": "rcp85"})
+    resp = await cliente_api.get("/api/resultados", params={"cenario": "rcp85"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] == 2
@@ -112,7 +112,7 @@ async def test_get_resultados_filtra_por_nomes_indices_csv(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados", params={"nomes_indices": "CDD"})
+    resp = await cliente_api.get("/api/resultados", params={"nomes_indices": "CDD"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] == 2
@@ -125,7 +125,7 @@ async def test_get_resultados_paginacao(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados", params={"limit": 2, "offset": 0})
+    resp = await cliente_api.get("/api/resultados", params={"limit": 2, "offset": 0})
     body = resp.json()
     assert body["total"] == 6
     assert len(body["items"]) == 2
@@ -137,7 +137,7 @@ async def test_get_resultados_raio_km_exige_centros(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados", params={"raio_km": 100, "centro_lat": -23.5})
+    resp = await cliente_api.get("/api/resultados", params={"raio_km": 100, "centro_lat": -23.5})
     assert resp.status_code == 422
     body = resp.json()
     assert body["title"] == "Parâmetros inválidos"
@@ -151,7 +151,7 @@ async def test_get_resultados_com_raio_filtra_por_haversine(
     await _popular(async_sessionmaker_)
     # Centro em SP (-23.5,-46.6). Raio 100 km cobre só SP (~0 km), não Rio (~358 km).
     resp = await cliente_api.get(
-        "/resultados",
+        "/api/resultados",
         params={
             "raio_km": 100,
             "centro_lat": -23.5,
@@ -173,7 +173,7 @@ async def test_get_agregados_media_por_ano(
 ) -> None:
     await _popular(async_sessionmaker_)
     resp = await cliente_api.get(
-        "/resultados/agregados",
+        "/api/resultados/agregados",
         params={"agregacao": "media", "agrupar_por": "ano", "nomes_indices": "PRCPTOT"},
     )
     assert resp.status_code == 200
@@ -192,7 +192,7 @@ async def test_get_agregados_count_global(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados/agregados", params={"agregacao": "count"})
+    resp = await cliente_api.get("/api/resultados/agregados", params={"agregacao": "count"})
     body = resp.json()
     assert len(body["grupos"]) == 1
     assert body["grupos"][0]["valor"] == 6.0
@@ -204,7 +204,7 @@ async def test_get_agregados_agregacao_invalida_retorna_422(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados/agregados", params={"agregacao": "soma"})
+    resp = await cliente_api.get("/api/resultados/agregados", params={"agregacao": "soma"})
     # Validação do FastAPI (pattern regex no Query) → 422 com detail de validação.
     assert resp.status_code == 422
 
@@ -215,7 +215,7 @@ async def test_get_agregados_agrupar_por_invalido_retorna_422(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados/agregados", params={"agrupar_por": "xpto"})
+    resp = await cliente_api.get("/api/resultados/agregados", params={"agrupar_por": "xpto"})
     assert resp.status_code == 422
     body = resp.json()
     assert "agrupar_por" in body.get("detail", "").lower()
@@ -228,7 +228,7 @@ async def test_get_agregados_por_cenario_usa_join(
 ) -> None:
     await _popular(async_sessionmaker_)
     resp = await cliente_api.get(
-        "/resultados/agregados",
+        "/api/resultados/agregados",
         params={"agregacao": "media", "agrupar_por": "cenario", "nomes_indices": "PRCPTOT"},
     )
     body = resp.json()
@@ -243,7 +243,7 @@ async def test_get_stats(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     await _popular(async_sessionmaker_)
-    resp = await cliente_api.get("/resultados/stats")
+    resp = await cliente_api.get("/api/resultados/stats")
     assert resp.status_code == 200
     body = resp.json()
     assert sorted(body["cenarios"]) == ["rcp45", "rcp85"]
@@ -256,7 +256,7 @@ async def test_get_stats(
 
 @pytest.mark.asyncio
 async def test_get_stats_banco_vazio(cliente_api: AsyncClient) -> None:
-    resp = await cliente_api.get("/resultados/stats")
+    resp = await cliente_api.get("/api/resultados/stats")
     assert resp.status_code == 200
     body = resp.json()
     assert body["total_resultados"] == 0
@@ -267,6 +267,6 @@ async def test_get_stats_banco_vazio(cliente_api: AsyncClient) -> None:
 async def test_get_resultados_limit_acima_do_maximo_rejeita(
     cliente_api: AsyncClient,
 ) -> None:
-    resp = await cliente_api.get("/resultados", params={"limit": 2000})
+    resp = await cliente_api.get("/api/resultados", params={"limit": 2000})
     # 422 do Pydantic (regra ``le=1000`` no Query).
     assert resp.status_code == 422

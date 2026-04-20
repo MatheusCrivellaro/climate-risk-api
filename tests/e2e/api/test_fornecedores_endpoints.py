@@ -12,7 +12,7 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 async def test_post_cria_fornecedor_201(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.post(
-        "/fornecedores",
+        "/api/fornecedores",
         json={"nome": "Acme", "cidade": "São Paulo", "uf": "sp"},
     )
 
@@ -29,7 +29,7 @@ async def test_post_cria_fornecedor_201(cliente_api: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_post_payload_invalido_422(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.post(
-        "/fornecedores", json={"nome": "", "cidade": "SP", "uf": "SP"}
+        "/api/fornecedores", json={"nome": "", "cidade": "SP", "uf": "SP"}
     )
 
     assert resposta.status_code == 422
@@ -39,11 +39,11 @@ async def test_post_payload_invalido_422(cliente_api: AsyncClient) -> None:
 async def test_get_lista_paginada_com_filtro_uf(cliente_api: AsyncClient) -> None:
     for nome, uf in [("A", "SP"), ("B", "SP"), ("C", "RJ")]:
         await cliente_api.post(
-            "/fornecedores",
+            "/api/fornecedores",
             json={"nome": nome, "cidade": "Cidade", "uf": uf},
         )
 
-    resposta = await cliente_api.get("/fornecedores", params={"uf": "SP", "limit": 10})
+    resposta = await cliente_api.get("/api/fornecedores", params={"uf": "SP", "limit": 10})
 
     assert resposta.status_code == 200
     pagina = resposta.json()
@@ -56,12 +56,12 @@ async def test_get_lista_paginada_com_filtro_uf(cliente_api: AsyncClient) -> Non
 @pytest.mark.asyncio
 async def test_get_detalhe_por_id(cliente_api: AsyncClient) -> None:
     criado = await cliente_api.post(
-        "/fornecedores",
+        "/api/fornecedores",
         json={"nome": "Acme", "cidade": "SP", "uf": "SP"},
     )
     forn_id = criado.json()["id"]
 
-    resposta = await cliente_api.get(f"/fornecedores/{forn_id}")
+    resposta = await cliente_api.get(f"/api/fornecedores/{forn_id}")
 
     assert resposta.status_code == 200
     assert resposta.json()["id"] == forn_id
@@ -69,7 +69,7 @@ async def test_get_detalhe_por_id(cliente_api: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_detalhe_404(cliente_api: AsyncClient) -> None:
-    resposta = await cliente_api.get("/fornecedores/forn_nao_existe")
+    resposta = await cliente_api.get("/api/fornecedores/forn_nao_existe")
 
     assert resposta.status_code == 404
     assert "application/problem+json" in resposta.headers["content-type"]
@@ -78,15 +78,15 @@ async def test_get_detalhe_404(cliente_api: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_delete_204_e_depois_404(cliente_api: AsyncClient) -> None:
     criado = await cliente_api.post(
-        "/fornecedores",
+        "/api/fornecedores",
         json={"nome": "Acme", "cidade": "SP", "uf": "SP"},
     )
     forn_id = criado.json()["id"]
 
-    resposta = await cliente_api.delete(f"/fornecedores/{forn_id}")
+    resposta = await cliente_api.delete(f"/api/fornecedores/{forn_id}")
     assert resposta.status_code == 204
 
-    segunda = await cliente_api.delete(f"/fornecedores/{forn_id}")
+    segunda = await cliente_api.delete(f"/api/fornecedores/{forn_id}")
     assert segunda.status_code == 404
 
 
@@ -95,7 +95,7 @@ async def test_importar_csv(cliente_api: AsyncClient) -> None:
     csv_conteudo = b"nome,cidade,uf\nAcme,Sao Paulo,SP\nBeta,Rio,RJ\n"
 
     resposta = await cliente_api.post(
-        "/fornecedores/importar",
+        "/api/fornecedores/importar",
         files={"arquivo": ("fornecedores.csv", csv_conteudo, "text/csv")},
     )
 
@@ -119,7 +119,7 @@ async def test_importar_xlsx(cliente_api: AsyncClient) -> None:
     wb.save(buf)
 
     resposta = await cliente_api.post(
-        "/fornecedores/importar",
+        "/api/fornecedores/importar",
         files={
             "arquivo": (
                 "fornecedores.xlsx",
@@ -137,7 +137,7 @@ async def test_importar_xlsx(cliente_api: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_importar_formato_invalido_400(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.post(
-        "/fornecedores/importar",
+        "/api/fornecedores/importar",
         files={"arquivo": ("lixo.txt", b"qualquer coisa", "text/plain")},
     )
 
@@ -150,7 +150,7 @@ async def test_importar_csv_relata_erros_por_linha(cliente_api: AsyncClient) -> 
     csv_conteudo = b"nome,cidade,uf\n,SP,SP\nAcme, ,SP\nBeta,Rio,RJX\n"
 
     resposta = await cliente_api.post(
-        "/fornecedores/importar",
+        "/api/fornecedores/importar",
         files={"arquivo": ("fornecedores.csv", csv_conteudo, "text/csv")},
     )
 
@@ -167,14 +167,14 @@ async def test_importar_csv_duplicados_internos_e_no_banco(
     cliente_api: AsyncClient,
 ) -> None:
     await cliente_api.post(
-        "/fornecedores",
+        "/api/fornecedores",
         json={"nome": "JaExiste", "cidade": "SP", "uf": "SP"},
     )
 
     csv_conteudo = b"nome,cidade,uf\nJaExiste,SP,SP\nNovo,SP,SP\nNovo,SP,SP\n"
 
     resposta = await cliente_api.post(
-        "/fornecedores/importar",
+        "/api/fornecedores/importar",
         files={"arquivo": ("fornecedores.csv", csv_conteudo, "text/csv")},
     )
 

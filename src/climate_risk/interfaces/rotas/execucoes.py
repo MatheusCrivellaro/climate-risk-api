@@ -182,8 +182,8 @@ def _traduzir_criacao_para_response(
         status=resultado.status,
         criado_em=resultado.criado_em.isoformat(),
         links={
-            "self": f"/execucoes/{resultado.execucao_id}",
-            "job": f"/jobs/{resultado.job_id}",
+            "self": f"/api/execucoes/{resultado.execucao_id}",
+            "job": f"/api/jobs/{resultado.job_id}",
         },
     )
 

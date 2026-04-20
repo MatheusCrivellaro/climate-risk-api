@@ -29,7 +29,7 @@ from climate_risk.infrastructure.db.repositorios import (
 
 @pytest.mark.asyncio
 async def test_stats_banco_vazio(cliente_api: AsyncClient) -> None:
-    resposta = await cliente_api.get("/admin/stats")
+    resposta = await cliente_api.get("/api/admin/stats")
 
     assert resposta.status_code == 200
     corpo = resposta.json()
@@ -156,7 +156,7 @@ async def test_stats_agrega_contadores_e_distincts(
             ]
         )
 
-    resposta = await cliente_api.get("/admin/stats")
+    resposta = await cliente_api.get("/api/admin/stats")
 
     assert resposta.status_code == 200
     corpo = resposta.json()
