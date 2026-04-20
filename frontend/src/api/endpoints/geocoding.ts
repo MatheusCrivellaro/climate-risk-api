@@ -6,6 +6,9 @@ export type GeocodificarResponse = components['schemas']['GeocodificarResponse']
 export type LocalizarPontosRequest = components['schemas']['LocalizarPontosRequest'];
 export type LocalizarPontosResponse = components['schemas']['LocalizarPontosResponse'];
 export type EntradaLocalizacaoSchema = components['schemas']['EntradaLocalizacaoSchema'];
+export type LocalizacaoGeocodificadaSchema = components['schemas']['LocalizacaoGeocodificadaSchema'];
+export type PontoParaLocalizarRequest = components['schemas']['PontoParaLocalizarRequest'];
+export type PontoLocalizadoResponse = components['schemas']['PontoLocalizadoResponse'];
 
 export function geocodificar(body: GeocodificarRequest): Promise<GeocodificarResponse> {
   return request<GeocodificarResponse>('/localizacoes/geocodificar', { method: 'POST', body });
