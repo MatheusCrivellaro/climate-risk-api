@@ -1,6 +1,9 @@
 import { Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/features/layout/AppLayout';
 import DashboardPage from '@/pages/Dashboard';
+import ExecucaoDetalhePage from '@/pages/ExecucaoDetalhe';
+import ExecucoesListPage from '@/pages/ExecucoesList';
+import ExecucoesNovaPage from '@/pages/ExecucoesNova';
 import NotFound from '@/pages/NotFound';
 import { Placeholder } from '@/pages/Placeholder';
 
@@ -9,28 +12,9 @@ export default function App() {
     <AppLayout>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
-        <Route
-          path="/execucoes"
-          element={<Placeholder title="Execuções" breadcrumbs={[{ label: 'Execuções' }]} />}
-        />
-        <Route
-          path="/execucoes/nova"
-          element={
-            <Placeholder
-              title="Nova execução"
-              breadcrumbs={[{ label: 'Execuções', to: '/execucoes' }, { label: 'Nova' }]}
-            />
-          }
-        />
-        <Route
-          path="/execucoes/:id"
-          element={
-            <Placeholder
-              title="Detalhe da execução"
-              breadcrumbs={[{ label: 'Execuções', to: '/execucoes' }, { label: 'Detalhe' }]}
-            />
-          }
-        />
+        <Route path="/execucoes" element={<ExecucoesListPage />} />
+        <Route path="/execucoes/nova" element={<ExecucoesNovaPage />} />
+        <Route path="/execucoes/:id" element={<ExecucaoDetalhePage />} />
         <Route path="/jobs" element={<Placeholder title="Jobs" breadcrumbs={[{ label: 'Jobs' }]} />} />
         <Route
           path="/calculos/pontos"
