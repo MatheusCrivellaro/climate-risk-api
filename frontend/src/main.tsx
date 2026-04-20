@@ -26,7 +26,7 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename="/app">
         <App />
       </BrowserRouter>
     </QueryClientProvider>

@@ -5,8 +5,6 @@ export interface AppLayoutProps {
   children: ReactNode;
 }
 
-const API_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
-
 export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="grid min-h-screen grid-cols-[auto_1fr] bg-slate-50">
@@ -16,7 +14,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <footer className="flex items-center justify-between border-t border-slate-200 bg-white px-8 py-3 text-xs text-slate-500">
           <span>Climate Risk UI · v0.1.0</span>
           <a
-            href={`${API_URL}/docs`}
+            href="/docs"
             target="_blank"
             rel="noreferrer"
             className="text-primary-700 hover:underline"

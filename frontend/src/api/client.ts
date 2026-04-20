@@ -22,7 +22,10 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+// Frontend e backend sempre são servidos pela mesma origem:
+// em dev via proxy do Vite (/api → http://localhost:8000),
+// em prod pelo próprio FastAPI servindo o build em /app/.
+const baseUrl = '/api';
 
 export type QueryParams = Readonly<Record<string, unknown>> | object;
 
@@ -35,22 +38,23 @@ interface RequestOptions {
 }
 
 function buildUrl(path: string, query: QueryParams | undefined): string {
-  const url = new URL(`${baseUrl}${path}`);
+  const params = new URLSearchParams();
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === '') continue;
       if (Array.isArray(value)) {
         for (const item of value) {
           if (item !== undefined && item !== null && item !== '') {
-            url.searchParams.append(key, String(item));
+            params.append(key, String(item));
           }
         }
       } else {
-        url.searchParams.set(key, String(value));
+        params.set(key, String(value));
       }
     }
   }
-  return url.toString();
+  const qs = params.toString();
+  return qs ? `${baseUrl}${path}?${qs}` : `${baseUrl}${path}`;
 }
 
 function isFormData(value: unknown): value is FormData {
