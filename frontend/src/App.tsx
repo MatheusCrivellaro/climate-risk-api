@@ -8,6 +8,7 @@ import ExecucoesNovaPage from '@/pages/ExecucoesNova';
 import JobsListPage from '@/pages/JobsList';
 import NotFound from '@/pages/NotFound';
 import { Placeholder } from '@/pages/Placeholder';
+import ResultadosPage from '@/pages/Resultados';
 
 export default function App() {
   return (
@@ -19,10 +20,7 @@ export default function App() {
         <Route path="/execucoes/:id" element={<ExecucaoDetalhePage />} />
         <Route path="/jobs" element={<JobsListPage />} />
         <Route path="/calculos/pontos" element={<CalculosPontosPage />} />
-        <Route
-          path="/resultados"
-          element={<Placeholder title="Resultados" breadcrumbs={[{ label: 'Resultados' }]} />}
-        />
+        <Route path="/resultados" element={<ResultadosPage />} />
         <Route
           path="/fornecedores"
           element={<Placeholder title="Fornecedores" breadcrumbs={[{ label: 'Fornecedores' }]} />}
