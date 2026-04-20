@@ -23,3 +23,8 @@ coverage
 .idea
 .DS_Store
 *.sw?
+
+# The repo-root .gitignore excludes `lib/` (Python packaging). Re-include
+# frontend source directories that happen to match that name.
+!src/lib/
+!src/lib/**
