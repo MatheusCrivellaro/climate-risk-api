@@ -135,15 +135,9 @@ CalculadorCentroideDep = Annotated[CalculadorShapely, Depends(obter_calculador_c
 
 def obter_caso_uso_calcular_por_pontos(
     leitor: LeitorNetCDFDep,
-    repo_execucoes: RepoExecucoesDep,
-    repo_resultados: RepoResultadosDep,
 ) -> CalcularIndicesPorPontos:
-    """Compõe :class:`CalcularIndicesPorPontos` com dependências concretas."""
-    return CalcularIndicesPorPontos(
-        leitor_netcdf=leitor,
-        repositorio_execucoes=repo_execucoes,
-        repositorio_resultados=repo_resultados,
-    )
+    """Compõe :class:`CalcularIndicesPorPontos` — caso de uso puro (Slice 4)."""
+    return CalcularIndicesPorPontos(leitor_netcdf=leitor)
 
 
 def obter_caso_uso_criar_execucao(

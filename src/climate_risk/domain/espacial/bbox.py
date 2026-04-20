@@ -1,7 +1,8 @@
 """Caixa delimitadora espacial (bounding box) e máscara associada.
 
-Portado de ``legacy/gera_pontos_fornecedores.py`` (função ``build_in_bbox_mask``)
-com a tupla de coordenadas substituída por uma dataclass frozen.
+Portado do script legado ``gera_pontos_fornecedores.py`` (função
+``build_in_bbox_mask``), com a tupla de coordenadas substituída por uma
+dataclass frozen. Código legado removido na Slice 12.
 """
 
 from __future__ import annotations

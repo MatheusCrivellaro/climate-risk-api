@@ -1,7 +1,7 @@
 """Conversores de unidade para precipitação.
 
-Portado de ``legacy/gera_pontos_fornecedores.py`` (função
-``convert_pr_to_mm_per_day``).
+Portado do script legado ``gera_pontos_fornecedores.py`` (função
+``convert_pr_to_mm_per_day``; código legado removido na Slice 12).
 
 ATENÇÃO — preservação bit-a-bit da heurística ``vmax < 5.0``: ver ADR-007.
 A heurística é mantida intencionalmente no MVP para garantir paridade

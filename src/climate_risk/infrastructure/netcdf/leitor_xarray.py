@@ -1,7 +1,8 @@
 """Adaptador :class:`LeitorXarray` — implementação de :class:`LeitorNetCDF`.
 
-Porta as quatro funções do legado (``legacy/gera_pontos_fornecedores.py``)
-para helpers privados deste módulo, conforme ADR-001:
+Porta as quatro funções do script legado ``gera_pontos_fornecedores.py``
+(código legado removido na Slice 12) para helpers privados deste módulo,
+conforme ADR-001:
 
 - ``open_nc_multi``      -> :func:`_abrir_multi_engine`
 - ``safe_open_with_copy``-> :func:`_abrir_com_fallback_copia`

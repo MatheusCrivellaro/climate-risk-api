@@ -7,8 +7,8 @@ Executado **pelo Worker**, consumindo um :class:`Job` do tipo
 1. Carrega a :class:`Execucao` (deve estar em ``pending``).
 2. Transiciona para ``running``.
 3. Delega o trabalho pesado a :class:`CalcularIndicesPorPontos`
-   (Slice 4), passando ``persistir=False`` — ou seja, apenas calcula
-   sem criar execução nova nem tocar em resultados.
+   (Slice 4), que é puro — apenas calcula e devolve
+   :class:`ResultadoPonto` por ponto/ano.
 4. Converte cada :class:`ResultadoPonto` em 8
    :class:`ResultadoIndice` carregando o ``execucao_id`` desta execução.
 5. Persiste em lotes de 1000 via :class:`RepositorioResultados`.
@@ -126,13 +126,9 @@ class ProcessarPontosLote:
     async def _processar(
         self, execucao: Execucao, params: ParametrosProcessamentoPontos
     ) -> ResultadoProcessamentoPontos:
-        # Delega ao caso de uso síncrono (Slice 4) com persistir=False.
-        # O caso de uso não sabe sobre esta execução — apenas calcula.
-        calculadora = CalcularIndicesPorPontos(
-            leitor_netcdf=self._leitor,
-            repositorio_execucoes=self._repo_execucoes,
-            repositorio_resultados=self._repo_resultados,
-        )
+        # Delega ao caso de uso síncrono (Slice 4) — puro: apenas calcula.
+        # Este caso de uso é responsável pela persistência dos resultados.
+        calculadora = CalcularIndicesPorPontos(leitor_netcdf=self._leitor)
         parametros_sincronos = ParametrosCalculo(
             arquivo_nc=params.arquivo_nc,
             cenario=params.cenario,
@@ -141,12 +137,12 @@ class ProcessarPontosLote:
             parametros_indices=params.parametros_indices,
             p95_baseline=params.p95_baseline,
             p95_wet_thr=params.p95_wet_thr,
-            persistir=False,
         )
         calculo = await calculadora.executar(parametros_sincronos)
 
         # Flatten: cada ResultadoPonto → 8 ResultadoIndice (um por índice).
-        # O execucao_id do Slice 4 vem vazio; preenchemos aqui.
+        # O caso de uso síncrono é puro e não conhece execução; preenchemos
+        # o execucao_id aqui.
         lote: list[ResultadoIndice] = []
         total_resultados = 0
         for ponto in calculo.resultados:
