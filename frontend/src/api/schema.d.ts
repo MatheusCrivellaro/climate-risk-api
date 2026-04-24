@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/health": {
+    "/api/health": {
         parameters: {
             query?: never;
             header?: never;
@@ -15,7 +15,7 @@ export interface paths {
          * Verificação de liveness.
          * @description Retorna ``{"status": "ok"}`` quando o processo responde.
          */
-        get: operations["health_health_get"];
+        get: operations["health_api_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24,7 +24,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/health/ready": {
+    "/api/health/ready": {
         parameters: {
             query?: never;
             header?: never;
@@ -44,7 +44,7 @@ export interface paths {
          *     Retorna ``200`` com ``{"status": "ready", ...}`` apenas quando tudo bate;
          *     em qualquer outra situação, ``503`` com detalhes sobre a discrepância.
          */
-        get: operations["health_ready_health_ready_get"];
+        get: operations["health_ready_api_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -53,7 +53,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/calculos/pontos": {
+    "/api/calculos/pontos": {
         parameters: {
             query?: never;
             header?: never;
@@ -72,14 +72,14 @@ export interface paths {
          *     Ambos os ramos traduzem o payload Pydantic para dataclasses de
          *     ``application`` antes de invocar o caso de uso (ADR-005).
          */
-        post: operations["calcular_por_pontos_calculos_pontos_post"];
+        post: operations["calcular_por_pontos_api_calculos_pontos_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/execucoes": {
+    "/api/execucoes": {
         parameters: {
             query?: never;
             header?: never;
@@ -87,20 +87,20 @@ export interface paths {
             cookie?: never;
         };
         /** Lista execuções com filtros opcionais por cenário/variável/status. */
-        get: operations["listar_execucoes_execucoes_get"];
+        get: operations["listar_execucoes_api_execucoes_get"];
         put?: never;
         /**
          * Cria uma execução CORDEX e enfileira o job de processamento.
          * @description Enfileira um job CORDEX. Retorna 202 com ``links.self`` e ``links.job``.
          */
-        post: operations["criar_execucao_execucoes_post"];
+        post: operations["criar_execucao_api_execucoes_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/execucoes/{execucao_id}": {
+    "/api/execucoes/{execucao_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -108,7 +108,7 @@ export interface paths {
             cookie?: never;
         };
         /** Obtém detalhes de uma execução. */
-        get: operations["obter_execucao_execucoes__execucao_id__get"];
+        get: operations["obter_execucao_api_execucoes__execucao_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -117,7 +117,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/execucoes/{execucao_id}/cancelar": {
+    "/api/execucoes/{execucao_id}/cancelar": {
         parameters: {
             query?: never;
             header?: never;
@@ -127,14 +127,31 @@ export interface paths {
         get?: never;
         put?: never;
         /** Cancela uma execução em estado 'pending'. */
-        post: operations["cancelar_execucao_execucoes__execucao_id__cancelar_post"];
+        post: operations["cancelar_execucao_api_execucoes__execucao_id__cancelar_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/jobs": {
+    "/api/execucoes/estresse-hidrico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cria uma execução de estresse hídrico e enfileira o job de processamento. */
+        post: operations["criar_execucao_estresse_hidrico_api_execucoes_estresse_hidrico_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -142,7 +159,7 @@ export interface paths {
             cookie?: never;
         };
         /** Lista jobs com filtros opcionais por status/tipo. */
-        get: operations["listar_jobs_jobs_get"];
+        get: operations["listar_jobs_api_jobs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -151,7 +168,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/jobs/{job_id}": {
+    "/api/jobs/{job_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -159,7 +176,7 @@ export interface paths {
             cookie?: never;
         };
         /** Obtém um job pelo id. */
-        get: operations["obter_job_jobs__job_id__get"];
+        get: operations["obter_job_api_jobs__job_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -168,7 +185,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/jobs/{job_id}/retry": {
+    "/api/jobs/{job_id}/retry": {
         parameters: {
             query?: never;
             header?: never;
@@ -178,14 +195,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Reprocessa um job que está em estado 'failed'. */
-        post: operations["reprocessar_job_jobs__job_id__retry_post"];
+        post: operations["reprocessar_job_api_jobs__job_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/localizacoes/geocodificar": {
+    "/api/localizacoes/geocodificar": {
         parameters: {
             query?: never;
             header?: never;
@@ -203,14 +220,14 @@ export interface paths {
          *     ainda não foi cacheada, os itens daquela UF voltam com
          *     ``metodo="api_falhou"`` e o endpoint ainda responde 200.
          */
-        post: operations["geocodificar_localizacoes_geocodificar_post"];
+        post: operations["geocodificar_api_localizacoes_geocodificar_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/localizacoes/localizar": {
+    "/api/localizacoes/localizar": {
         parameters: {
             query?: never;
             header?: never;
@@ -226,14 +243,14 @@ export interface paths {
          *     Pontos fora do território brasileiro voltam com ``encontrado=false``
          *     e campos de município nulos — o endpoint não bloqueia o lote.
          */
-        post: operations["localizar_localizacoes_localizar_post"];
+        post: operations["localizar_api_localizacoes_localizar_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/cobertura/fornecedores": {
+    "/api/cobertura/fornecedores": {
         parameters: {
             query?: never;
             header?: never;
@@ -254,14 +271,14 @@ export interface paths {
          *     Cada linha com ``/`` vira um :class:`FornecedorEntrada`; o
          *     ``identificador`` ecoa a linha original.
          */
-        post: operations["cobertura_fornecedores_cobertura_fornecedores_post"];
+        post: operations["cobertura_fornecedores_api_cobertura_fornecedores_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/fornecedores": {
+    "/api/fornecedores": {
         parameters: {
             query?: never;
             header?: never;
@@ -269,17 +286,17 @@ export interface paths {
             cookie?: never;
         };
         /** Lista fornecedores com filtros opcionais por UF e cidade. */
-        get: operations["listar_fornecedores_fornecedores_get"];
+        get: operations["listar_fornecedores_api_fornecedores_get"];
         put?: never;
         /** Cadastra um fornecedor. */
-        post: operations["criar_fornecedor_fornecedores_post"];
+        post: operations["criar_fornecedor_api_fornecedores_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/fornecedores/{fornecedor_id}": {
+    "/api/fornecedores/{fornecedor_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -287,17 +304,17 @@ export interface paths {
             cookie?: never;
         };
         /** Detalhe de um fornecedor. */
-        get: operations["obter_fornecedor_fornecedores__fornecedor_id__get"];
+        get: operations["obter_fornecedor_api_fornecedores__fornecedor_id__get"];
         put?: never;
         post?: never;
         /** Remove um fornecedor. */
-        delete: operations["remover_fornecedor_fornecedores__fornecedor_id__delete"];
+        delete: operations["remover_fornecedor_api_fornecedores__fornecedor_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/fornecedores/importar": {
+    "/api/fornecedores/importar": {
         parameters: {
             query?: never;
             header?: never;
@@ -315,14 +332,14 @@ export interface paths {
          *     ignoradas. Não faz geocodificação — use ``POST /localizacoes/geocodificar``
          *     depois se precisar preencher coordenadas.
          */
-        post: operations["importar_fornecedores_fornecedores_importar_post"];
+        post: operations["importar_fornecedores_api_fornecedores_importar_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/resultados": {
+    "/api/resultados": {
         parameters: {
             query?: never;
             header?: never;
@@ -330,7 +347,7 @@ export interface paths {
             cookie?: never;
         };
         /** Lista resultados com filtros ricos. */
-        get: operations["listar_resultados_resultados_get"];
+        get: operations["listar_resultados_api_resultados_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -339,7 +356,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/resultados/agregados": {
+    "/api/resultados/agregados": {
         parameters: {
             query?: never;
             header?: never;
@@ -347,7 +364,7 @@ export interface paths {
             cookie?: never;
         };
         /** Agrega resultados por dimensões (media, min, max, count, p50, p95). */
-        get: operations["agregar_resultados_resultados_agregados_get"];
+        get: operations["agregar_resultados_api_resultados_agregados_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -356,7 +373,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/resultados/stats": {
+    "/api/resultados/stats": {
         parameters: {
             query?: never;
             header?: never;
@@ -364,7 +381,7 @@ export interface paths {
             cookie?: never;
         };
         /** Estatísticas globais dos resultados armazenados. */
-        get: operations["obter_stats_resultados_stats_get"];
+        get: operations["obter_stats_api_resultados_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -373,7 +390,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/ibge/refresh": {
+    "/api/resultados/estresse-hidrico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista resultados de estresse hídrico com filtros opcionais. */
+        get: operations["listar_resultados_estresse_hidrico_api_resultados_estresse_hidrico_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ibge/refresh": {
         parameters: {
             query?: never;
             header?: never;
@@ -390,14 +424,14 @@ export interface paths {
          *     anual do IBGE). Nenhuma autenticação por enquanto: o endpoint ``/admin``
          *     serve de placeholder para uma camada futura.
          */
-        post: operations["refresh_ibge_admin_ibge_refresh_post"];
+        post: operations["refresh_ibge_api_admin_ibge_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/admin/stats": {
+    "/api/admin/stats": {
         parameters: {
             query?: never;
             header?: never;
@@ -412,7 +446,7 @@ export interface paths {
          *     sobre as quatro entidades principais. Nenhuma consulta é cara: todos
          *     os ``SELECT COUNT(*)`` rodam direto sobre índices primários.
          */
-        get: operations["admin_stats_admin_stats_get"];
+        get: operations["admin_stats_api_admin_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -490,8 +524,8 @@ export interface components {
              */
             lon_max: number;
         };
-        /** Body_importar_fornecedores_fornecedores_importar_post */
-        Body_importar_fornecedores_fornecedores_importar_post: {
+        /** Body_importar_fornecedores_api_fornecedores_importar_post */
+        Body_importar_fornecedores_api_fornecedores_importar_post: {
             /** Arquivo */
             arquivo: string;
         };
@@ -665,6 +699,68 @@ export interface components {
             execucoes: number;
         };
         /**
+         * CriarExecucaoEstresseHidricoRequest
+         * @description Corpo do ``POST /api/execucoes/estresse-hidrico``.
+         * @example {
+         *       "arquivo_evap": "/dados/cordex/rcp45/evspsbl_day_BR_2026-2035.nc",
+         *       "arquivo_pr": "/dados/cordex/rcp45/pr_day_BR_2026-2035.nc",
+         *       "arquivo_tas": "/dados/cordex/rcp45/tas_day_BR_2026-2035.nc",
+         *       "cenario": "rcp45",
+         *       "parametros": {
+         *         "limiar_pr_mm_dia": 1,
+         *         "limiar_tas_c": 30
+         *       }
+         *     }
+         */
+        CriarExecucaoEstresseHidricoRequest: {
+            /**
+             * Arquivo Pr
+             * @description Caminho local do NetCDF de precipitação.
+             */
+            arquivo_pr: string;
+            /**
+             * Arquivo Tas
+             * @description Caminho local do NetCDF de temperatura.
+             */
+            arquivo_tas: string;
+            /**
+             * Arquivo Evap
+             * @description Caminho local do NetCDF de evaporação.
+             */
+            arquivo_evap: string;
+            /**
+             * Cenario
+             * @description Rótulo CORDEX (ex.: 'rcp45', 'rcp85', 'ssp245').
+             */
+            cenario: string;
+            parametros?: components["schemas"]["ParametrosIndicesEstresseHidricoSchema"];
+        };
+        /**
+         * CriarExecucaoEstresseHidricoResponse
+         * @description Corpo do ``202 Accepted``.
+         */
+        CriarExecucaoEstresseHidricoResponse: {
+            /** Execucao Id */
+            execucao_id: string;
+            /** Job Id */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Criado Em */
+            criado_em: string;
+            /**
+             * Links
+             * @description HATEOAS: ``self`` e ``job``.
+             * @example {
+             *       "job": "/api/jobs/job_01HX...",
+             *       "self": "/api/execucoes/exec_01HX..."
+             *     }
+             */
+            links: {
+                [key: string]: string;
+            };
+        };
+        /**
          * CriarExecucaoRequest
          * @description Corpo do ``POST /execucoes``.
          * @example {
@@ -730,8 +826,8 @@ export interface components {
              * Links
              * @description HATEOAS: ``self`` e ``job``.
              * @example {
-             *       "job": "/jobs/job_01HX...",
-             *       "self": "/execucoes/exec_01HX..."
+             *       "job": "/api/jobs/job_01HX...",
+             *       "self": "/api/execucoes/exec_01HX..."
              *     }
              */
             links: {
@@ -1028,6 +1124,20 @@ export interface components {
             items?: components["schemas"]["JobResponse"][];
         };
         /**
+         * ListarResultadosEstresseHidricoResponse
+         * @description Corpo do ``GET /api/resultados/estresse-hidrico``.
+         */
+        ListarResultadosEstresseHidricoResponse: {
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Items */
+            items: components["schemas"]["ResultadoEstresseHidricoSchema"][];
+        };
+        /**
          * LocalizacaoGeocodificadaSchema
          * @description Resposta unitária da geocodificação.
          */
@@ -1144,6 +1254,24 @@ export interface components {
             heavy50: number;
             /** @description Baseline do P95; ``null`` desativa o cálculo do P95. */
             p95_baseline?: components["schemas"]["PeriodoBaselineEntrada"] | null;
+        };
+        /**
+         * ParametrosIndicesEstresseHidricoSchema
+         * @description Limiares dos índices (espelha o dataclass de domínio).
+         */
+        ParametrosIndicesEstresseHidricoSchema: {
+            /**
+             * Limiar Pr Mm Dia
+             * @description Teto de precipitação para considerar um dia 'seco' (mm/dia).
+             * @default 1
+             */
+            limiar_pr_mm_dia: number;
+            /**
+             * Limiar Tas C
+             * @description Piso de temperatura para considerar um dia 'quente' (°C).
+             * @default 30
+             */
+            limiar_tas_c: number;
         };
         /**
          * PeriodoBaselineEntrada
@@ -1291,6 +1419,30 @@ export interface components {
             sem_centroide: number;
         };
         /**
+         * ResultadoEstresseHidricoSchema
+         * @description Item de :class:`ListarResultadosEstresseHidricoResponse`.
+         */
+        ResultadoEstresseHidricoSchema: {
+            /** Id */
+            id: string;
+            /** Execucao Id */
+            execucao_id: string;
+            /** Municipio Id */
+            municipio_id: number;
+            /** Ano */
+            ano: number;
+            /** Cenario */
+            cenario: string;
+            /** Frequencia Dias Secos Quentes */
+            frequencia_dias_secos_quentes: number;
+            /** Intensidade Mm */
+            intensidade_mm: number;
+            /** Nome Municipio */
+            nome_municipio?: string | null;
+            /** Uf */
+            uf?: string | null;
+        };
+        /**
          * ResultadoImportacaoResponse
          * @description Resposta de ``POST /fornecedores/importar``.
          */
@@ -1354,7 +1506,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    health_health_get: {
+    health_api_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1376,7 +1528,7 @@ export interface operations {
             };
         };
     };
-    health_ready_health_ready_get: {
+    health_ready_api_health_ready_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1398,7 +1550,7 @@ export interface operations {
             };
         };
     };
-    calcular_por_pontos_calculos_pontos_post: {
+    calcular_por_pontos_api_calculos_pontos_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1458,7 +1610,7 @@ export interface operations {
             };
         };
     };
-    listar_execucoes_execucoes_get: {
+    listar_execucoes_api_execucoes_get: {
         parameters: {
             query?: {
                 cenario?: string | null;
@@ -1493,7 +1645,7 @@ export interface operations {
             };
         };
     };
-    criar_execucao_execucoes_post: {
+    criar_execucao_api_execucoes_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1535,7 +1687,7 @@ export interface operations {
             };
         };
     };
-    obter_execucao_execucoes__execucao_id__get: {
+    obter_execucao_api_execucoes__execucao_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1575,7 +1727,7 @@ export interface operations {
             };
         };
     };
-    cancelar_execucao_execucoes__execucao_id__cancelar_post: {
+    cancelar_execucao_api_execucoes__execucao_id__cancelar_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1624,7 +1776,49 @@ export interface operations {
             };
         };
     };
-    listar_jobs_jobs_get: {
+    criar_execucao_estresse_hidrico_api_execucoes_estresse_hidrico_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CriarExecucaoEstresseHidricoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriarExecucaoEstresseHidricoResponse"];
+                };
+            };
+            /** @description Algum dos três arquivos NetCDF não foi encontrado. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Erro de validação do corpo. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listar_jobs_api_jobs_get: {
         parameters: {
             query?: {
                 status?: string | null;
@@ -1658,7 +1852,7 @@ export interface operations {
             };
         };
     };
-    obter_job_jobs__job_id__get: {
+    obter_job_api_jobs__job_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1698,7 +1892,7 @@ export interface operations {
             };
         };
     };
-    reprocessar_job_jobs__job_id__retry_post: {
+    reprocessar_job_api_jobs__job_id__retry_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1747,7 +1941,7 @@ export interface operations {
             };
         };
     };
-    geocodificar_localizacoes_geocodificar_post: {
+    geocodificar_api_localizacoes_geocodificar_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1789,7 +1983,7 @@ export interface operations {
             };
         };
     };
-    localizar_localizacoes_localizar_post: {
+    localizar_api_localizacoes_localizar_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1831,7 +2025,7 @@ export interface operations {
             };
         };
     };
-    cobertura_fornecedores_cobertura_fornecedores_post: {
+    cobertura_fornecedores_api_cobertura_fornecedores_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1873,7 +2067,7 @@ export interface operations {
             };
         };
     };
-    listar_fornecedores_fornecedores_get: {
+    listar_fornecedores_api_fornecedores_get: {
         parameters: {
             query?: {
                 uf?: string | null;
@@ -1907,7 +2101,7 @@ export interface operations {
             };
         };
     };
-    criar_fornecedor_fornecedores_post: {
+    criar_fornecedor_api_fornecedores_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1949,7 +2143,7 @@ export interface operations {
             };
         };
     };
-    obter_fornecedor_fornecedores__fornecedor_id__get: {
+    obter_fornecedor_api_fornecedores__fornecedor_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1989,7 +2183,7 @@ export interface operations {
             };
         };
     };
-    remover_fornecedor_fornecedores__fornecedor_id__delete: {
+    remover_fornecedor_api_fornecedores__fornecedor_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2027,7 +2221,7 @@ export interface operations {
             };
         };
     };
-    importar_fornecedores_fornecedores_importar_post: {
+    importar_fornecedores_api_fornecedores_importar_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2036,7 +2230,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_importar_fornecedores_fornecedores_importar_post"];
+                "multipart/form-data": components["schemas"]["Body_importar_fornecedores_api_fornecedores_importar_post"];
             };
         };
         responses: {
@@ -2069,7 +2263,7 @@ export interface operations {
             };
         };
     };
-    listar_resultados_resultados_get: {
+    listar_resultados_api_resultados_get: {
         parameters: {
             query?: {
                 /** @description Filtra por execução. */
@@ -2125,7 +2319,7 @@ export interface operations {
             };
         };
     };
-    agregar_resultados_resultados_agregados_get: {
+    agregar_resultados_api_resultados_agregados_get: {
         parameters: {
             query?: {
                 /** @description Função de agregação. */
@@ -2175,7 +2369,7 @@ export interface operations {
             };
         };
     };
-    obter_stats_resultados_stats_get: {
+    obter_stats_api_resultados_stats_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2195,7 +2389,46 @@ export interface operations {
             };
         };
     };
-    refresh_ibge_admin_ibge_refresh_post: {
+    listar_resultados_estresse_hidrico_api_resultados_estresse_hidrico_get: {
+        parameters: {
+            query?: {
+                execucao_id?: string | null;
+                cenario?: string | null;
+                ano?: number | null;
+                ano_min?: number | null;
+                ano_max?: number | null;
+                municipio_id?: number | null;
+                uf?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListarResultadosEstresseHidricoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_ibge_api_admin_ibge_refresh_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2224,7 +2457,7 @@ export interface operations {
             };
         };
     };
-    admin_stats_admin_stats_get: {
+    admin_stats_api_admin_stats_get: {
         parameters: {
             query?: never;
             header?: never;

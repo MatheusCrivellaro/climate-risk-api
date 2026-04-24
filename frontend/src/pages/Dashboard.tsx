@@ -25,6 +25,7 @@ import type { ExecucaoResumo } from '@/api/endpoints/execucoes';
 export default function DashboardPage() {
   const stats = useAdminStats();
   const execucoes = useListarExecucoes({ limit: 5, offset: 0 });
+  const execucoesPorTipo = useListarExecucoes({ limit: 500, offset: 0 });
   const jobsPending = useListarJobs({ status: 'pending', limit: 1, offset: 0 });
   const jobsRunning = useListarJobs({ status: 'running', limit: 1, offset: 0 });
   const jobsCompleted = useListarJobs({ status: 'completed', limit: 1, offset: 0 });
@@ -50,6 +51,7 @@ export default function DashboardPage() {
           loading={stats.isLoading}
           error={stats.error}
           data={stats.data}
+          breakdownTipos={breakdownPorTipo(execucoesPorTipo.data?.items ?? [])}
         />
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -84,6 +86,19 @@ export default function DashboardPage() {
   );
 }
 
+function breakdownPorTipo(items: ExecucaoResumo[]): { precipitacao: number; estresse: number } {
+  let precipitacao = 0;
+  let estresse = 0;
+  for (const item of items) {
+    if (item.tipo === 'estresse_hidrico') {
+      estresse += 1;
+    } else {
+      precipitacao += 1;
+    }
+  }
+  return { precipitacao, estresse };
+}
+
 interface MetricsSectionProps {
   loading: boolean;
   error: Error | null;
@@ -93,9 +108,10 @@ interface MetricsSectionProps {
         total_resultados: number;
       }
     | undefined;
+  breakdownTipos: { precipitacao: number; estresse: number };
 }
 
-function MetricsSection({ loading, error, data }: MetricsSectionProps) {
+function MetricsSection({ loading, error, data, breakdownTipos }: MetricsSectionProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-10">
@@ -116,6 +132,7 @@ function MetricsSection({ loading, error, data }: MetricsSectionProps) {
         value={formatNumber(data.contadores.execucoes)}
         icon={PlayCircle}
         accent="primary"
+        helper={`precipitação extrema: ${formatNumber(breakdownTipos.precipitacao)} · estresse hídrico: ${formatNumber(breakdownTipos.estresse)}`}
       />
       <MetricCard
         label="Jobs"

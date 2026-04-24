@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Droplet,
   FileText,
   LayoutDashboard,
   ListChecks,
@@ -23,6 +24,7 @@ export const NAVIGATION: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/execucoes', label: 'Execuções', icon: PlayCircle },
   { to: '/execucoes/nova', label: 'Nova execução', icon: FileText },
+  { to: '/execucoes/estresse-hidrico/nova', label: 'Estresse hídrico', icon: Droplet },
   { to: '/jobs', label: 'Jobs', icon: SquareKanban },
   { to: '/calculos/pontos', label: 'Cálculo por pontos', icon: Target },
   { to: '/resultados', label: 'Resultados', icon: BarChart3 },
