@@ -86,7 +86,8 @@ async def test_criar_execucao_arquivo_inexistente_retorna_404(
     cliente_api: AsyncClient,
 ) -> None:
     resposta = await cliente_api.post(
-        "/api/execucoes", json=_corpo_basico(arquivo_nc="/nao/existe.nc")
+        "/api/execucoes",
+        json=_corpo_basico(arquivo_nc="/nao/existe.nc"),
     )
     assert resposta.status_code == 404
     corpo = resposta.json()

@@ -7,6 +7,8 @@ capturar ``ErroDominio`` como raiz para traduzir para RFC 7807.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class ErroDominio(Exception):
     """Base de todas as exceções de domínio.
@@ -217,6 +219,7 @@ class ErroValidacao(ErroDominio):
         super().__init__(mensagem)
 
 
+
 class ErroGradeDesconhecida(ErroDominio):
     """DataArray sem coordenadas ``lat``/``lon`` identificáveis.
 
@@ -234,7 +237,6 @@ class ErroGradeDesconhecida(ErroDominio):
     def __init__(self, mensagem: str) -> None:
         super().__init__(mensagem)
 
-
 class ErroShapefileMunicipiosIndisponivel(ErroDominio):
     """Shapefile de municípios configurado mas inacessível.
 
@@ -251,6 +253,28 @@ class ErroShapefileMunicipiosIndisponivel(ErroDominio):
 
     def __init__(self, mensagem: str) -> None:
         super().__init__(mensagem)
+        
+class ErroCenarioInconsistente(ErroDominio):
+    """Arquivos de um mesmo lote multi-variável reportam cenários diferentes.
+
+    Levantada pelo :class:`LeitorCordexMultiVariavel` (Slice 13) quando os
+    três arquivos (``pr``/``tas``/``evspsbl``) passados numa mesma execução
+    de estresse hídrico não concordam no atributo ``experiment_id`` (nem
+    no regex extraído do nome do arquivo). O middleware HTTP traduz para
+    ``422`` — é erro de uso: o operador forneceu arquivos incompatíveis.
+
+    Args:
+        cenarios: Mapa ``{caminho: cenario}`` com o valor detectado por
+            arquivo, preservando a ordem de entrada para diagnóstico.
+    """
+
+    def __init__(self, cenarios: dict[str, str]) -> None:
+        self.cenarios = dict(cenarios)
+        detalhes = ", ".join(f"{Path(k).name}={v}" for k, v in cenarios.items())
+        super().__init__(
+            f"Arquivos reportam cenários divergentes: {detalhes}. "
+            "Todos os arquivos precisam compartilhar o mesmo cenário."
+        )
 
 
 class ErroJobEstadoInvalido(ErroDominio):
