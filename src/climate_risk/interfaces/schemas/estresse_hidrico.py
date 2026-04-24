@@ -72,6 +72,50 @@ class CriarExecucaoEstresseHidricoResponse(BaseModel):
     )
 
 
+class PastasCenarioSchema(BaseModel):
+    """As três pastas (pr/tas/evap) de um cenário (Slice 17)."""
+
+    pasta_pr: str = Field(..., min_length=1)
+    pasta_tas: str = Field(..., min_length=1)
+    pasta_evap: str = Field(..., min_length=1)
+
+
+class CriarExecucoesEstresseHidricoEmLoteRequest(BaseModel):
+    """Corpo do ``POST /api/execucoes/estresse-hidrico/em-lote``.
+
+    Cria duas execuções (uma por cenário) num único request. Falhas em
+    um cenário não cancelam o outro.
+    """
+
+    rcp45: PastasCenarioSchema
+    rcp85: PastasCenarioSchema
+    parametros: ParametrosIndicesEstresseHidricoSchema = Field(
+        default_factory=lambda: ParametrosIndicesEstresseHidricoSchema(
+            limiar_pr_mm_dia=1.0,
+            limiar_tas_c=30.0,
+        ),
+    )
+
+
+class ExecucaoEmLoteItem(BaseModel):
+    """Item do array de resposta do endpoint em-lote.
+
+    Quando a criação foi bem-sucedida, ``execucao_id`` e ``job_id`` estão
+    presentes e ``erro`` é ``None``. Em caso de falha de validação inicial
+    (ex.: pasta inexistente), apenas ``erro`` é preenchido.
+    """
+
+    cenario: str
+    execucao_id: str | None = None
+    job_id: str | None = None
+    status: str | None = None
+    erro: str | None = None
+
+
+class CriarExecucoesEstresseHidricoEmLoteResponse(BaseModel):
+    execucoes: list[ExecucaoEmLoteItem]
+
+
 class ResultadoEstresseHidricoSchema(BaseModel):
     """Item de :class:`ListarResultadosEstresseHidricoResponse`."""
 

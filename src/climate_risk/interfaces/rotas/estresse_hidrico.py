@@ -18,10 +18,12 @@ from climate_risk.application.indices.calcular_estresse_hidrico import (
     CalcularIndicesEstresseHidrico,
     ExecucaoIniciada,
     ParametrosCalculoEstresseHidrico,
+    ParametrosCalculoEstresseHidricoPasta,
 )
 from climate_risk.domain.calculos.estresse_hidrico import (
     ParametrosIndicesEstresseHidrico,
 )
+from climate_risk.domain.excecoes import ErroDominio
 from climate_risk.infrastructure.db.repositorios.resultado_estresse_hidrico import (
     SQLAlchemyRepositorioResultadoEstresseHidrico,
 )
@@ -33,7 +35,11 @@ from climate_risk.interfaces.schemas.comum import ProblemDetails
 from climate_risk.interfaces.schemas.estresse_hidrico import (
     CriarExecucaoEstresseHidricoRequest,
     CriarExecucaoEstresseHidricoResponse,
+    CriarExecucoesEstresseHidricoEmLoteRequest,
+    CriarExecucoesEstresseHidricoEmLoteResponse,
+    ExecucaoEmLoteItem,
     ListarResultadosEstresseHidricoResponse,
+    PastasCenarioSchema,
     ResultadoEstresseHidricoSchema,
 )
 
@@ -86,6 +92,69 @@ async def criar_execucao_estresse_hidrico(
     )
     resultado = await caso_uso.executar(params)
     return _traduzir_execucao_iniciada(resultado)
+
+
+@router_execucoes.post(
+    "/em-lote",
+    response_model=CriarExecucoesEstresseHidricoEmLoteResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Cria duas execuções (rcp45 + rcp85) a partir de pastas de NetCDF.",
+    responses={
+        422: {"model": ProblemDetails, "description": "Erro de validação do corpo."},
+    },
+)
+async def criar_execucoes_em_lote(
+    payload: CriarExecucoesEstresseHidricoEmLoteRequest,
+    caso_uso: CriarDep,
+) -> CriarExecucoesEstresseHidricoEmLoteResponse:
+    """Para cada cenário no body, dispara ``executar_de_pasta`` independente.
+
+    Falha de um cenário (ex.: pasta inexistente) **não** cancela o outro;
+    cada item da resposta mostra o status individual, com ``erro`` quando
+    a validação inicial falhou.
+    """
+    parametros_indices = ParametrosIndicesEstresseHidrico(
+        limiar_pr_mm_dia=payload.parametros.limiar_pr_mm_dia,
+        limiar_tas_c=payload.parametros.limiar_tas_c,
+    )
+    items: list[ExecucaoEmLoteItem] = []
+    for cenario, pastas in (("rcp45", payload.rcp45), ("rcp85", payload.rcp85)):
+        items.append(
+            await _criar_uma_execucao_em_lote(
+                caso_uso=caso_uso,
+                cenario=cenario,
+                pastas=pastas,
+                parametros_indices=parametros_indices,
+            )
+        )
+    return CriarExecucoesEstresseHidricoEmLoteResponse(execucoes=items)
+
+
+async def _criar_uma_execucao_em_lote(
+    *,
+    caso_uso: CalcularIndicesEstresseHidrico,
+    cenario: str,
+    pastas: PastasCenarioSchema,
+    parametros_indices: ParametrosIndicesEstresseHidrico,
+) -> ExecucaoEmLoteItem:
+    """Encapsula uma criação para que a falha de um cenário não derrube o outro."""
+    try:
+        params = ParametrosCalculoEstresseHidricoPasta(
+            pasta_pr=Path(pastas.pasta_pr),
+            pasta_tas=Path(pastas.pasta_tas),
+            pasta_evap=Path(pastas.pasta_evap),
+            cenario=cenario,
+            parametros_indices=parametros_indices,
+        )
+        resultado = await caso_uso.executar_de_pasta(params)
+    except ErroDominio as erro:
+        return ExecucaoEmLoteItem(cenario=cenario, erro=str(erro))
+    return ExecucaoEmLoteItem(
+        cenario=cenario,
+        execucao_id=resultado.execucao_id,
+        job_id=resultado.job_id,
+        status=resultado.status,
+    )
 
 
 @router_resultados.get(
