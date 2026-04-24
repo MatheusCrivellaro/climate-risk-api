@@ -30,10 +30,12 @@ __all__ = [
     "CalcularIndicesEstresseHidrico",
     "ExecucaoIniciada",
     "ParametrosCalculoEstresseHidrico",
+    "ParametrosCalculoEstresseHidricoPasta",
 ]
 
 TIPO_EXECUCAO = "estresse_hidrico"
 TIPO_JOB = "processar_estresse_hidrico"
+TIPO_JOB_PASTA = "processar_estresse_hidrico_pasta"
 # ``variavel`` é obrigatória na entidade ``Execucao``; usamos um rótulo
 # composto que identifica o trio (sem inventar um enum novo no domínio).
 VARIAVEL_COMPOSTA = "pr+tas+evap"
@@ -54,6 +56,23 @@ class ParametrosCalculoEstresseHidrico:
     arquivo_pr: Path
     arquivo_tas: Path
     arquivo_evap: Path
+    cenario: str
+    parametros_indices: ParametrosIndicesEstresseHidrico
+
+
+@dataclass(frozen=True)
+class ParametrosCalculoEstresseHidricoPasta:
+    """Variante do :class:`ParametrosCalculoEstresseHidrico` para Slice 17.
+
+    Em vez de um arquivo por variável, recebe **uma pasta** por variável.
+    Todos os ``.nc`` da pasta são concatenados temporalmente pelo
+    :class:`LeitorCordexMultiVariavel.abrir_de_pastas` no worker, e cada
+    arquivo é validado contra o ``cenario`` declarado.
+    """
+
+    pasta_pr: Path
+    pasta_tas: Path
+    pasta_evap: Path
     cenario: str
     parametros_indices: ParametrosIndicesEstresseHidrico
 
@@ -140,6 +159,63 @@ class CalcularIndicesEstresseHidrico:
             criado_em=agora,
         )
 
+    async def executar_de_pasta(
+        self,
+        params: ParametrosCalculoEstresseHidricoPasta,
+    ) -> ExecucaoIniciada:
+        """Variante de :meth:`executar` que recebe **pastas** (Slice 17).
+
+        Valida que as três pastas existem e são diretórios, cria
+        ``Execucao`` com ``tipo='estresse_hidrico'`` e enfileira
+        ``Job`` ``processar_estresse_hidrico_pasta``.
+        """
+        for pasta in (params.pasta_pr, params.pasta_tas, params.pasta_evap):
+            if not pasta.exists() or not pasta.is_dir():
+                raise ErroArquivoNCNaoEncontrado(
+                    caminho=str(pasta),
+                    detalhe="pasta não encontrada ou não é um diretório.",
+                )
+
+        agora = utc_now()
+        execucao_id = gerar_id("exec")
+        execucao = Execucao(
+            id=execucao_id,
+            cenario=params.cenario,
+            variavel=VARIAVEL_COMPOSTA,
+            arquivo_origem=str(params.pasta_pr),
+            tipo=TIPO_EXECUCAO,
+            parametros=_serializar_parametros_pasta(params),
+            status=StatusExecucao.PENDING,
+            criado_em=agora,
+            concluido_em=None,
+            job_id=None,
+        )
+        await self._repo.salvar(execucao)
+
+        payload = _montar_payload_pasta(execucao_id, params)
+        job = await self._fila.enfileirar(tipo=TIPO_JOB_PASTA, payload=payload)
+
+        execucao_com_job = Execucao(
+            id=execucao.id,
+            cenario=execucao.cenario,
+            variavel=execucao.variavel,
+            arquivo_origem=execucao.arquivo_origem,
+            tipo=execucao.tipo,
+            parametros=execucao.parametros,
+            status=execucao.status,
+            criado_em=execucao.criado_em,
+            concluido_em=execucao.concluido_em,
+            job_id=job.id,
+        )
+        await self._repo.salvar(execucao_com_job)
+
+        return ExecucaoIniciada(
+            execucao_id=execucao.id,
+            job_id=job.id,
+            status=execucao.status,
+            criado_em=agora,
+        )
+
 
 def _serializar_parametros(params: ParametrosCalculoEstresseHidrico) -> dict[str, Any]:
     return {
@@ -157,6 +233,32 @@ def _montar_payload(execucao_id: str, params: ParametrosCalculoEstresseHidrico) 
         "arquivo_pr": str(params.arquivo_pr),
         "arquivo_tas": str(params.arquivo_tas),
         "arquivo_evap": str(params.arquivo_evap),
+        "cenario": params.cenario,
+        "limiar_pr_mm_dia": params.parametros_indices.limiar_pr_mm_dia,
+        "limiar_tas_c": params.parametros_indices.limiar_tas_c,
+    }
+
+
+def _serializar_parametros_pasta(
+    params: ParametrosCalculoEstresseHidricoPasta,
+) -> dict[str, Any]:
+    return {
+        "pasta_pr": str(params.pasta_pr),
+        "pasta_tas": str(params.pasta_tas),
+        "pasta_evap": str(params.pasta_evap),
+        "limiar_pr_mm_dia": params.parametros_indices.limiar_pr_mm_dia,
+        "limiar_tas_c": params.parametros_indices.limiar_tas_c,
+    }
+
+
+def _montar_payload_pasta(
+    execucao_id: str, params: ParametrosCalculoEstresseHidricoPasta
+) -> dict[str, Any]:
+    return {
+        "execucao_id": execucao_id,
+        "pasta_pr": str(params.pasta_pr),
+        "pasta_tas": str(params.pasta_tas),
+        "pasta_evap": str(params.pasta_evap),
         "cenario": params.cenario,
         "limiar_pr_mm_dia": params.parametros_indices.limiar_pr_mm_dia,
         "limiar_tas_c": params.parametros_indices.limiar_tas_c,

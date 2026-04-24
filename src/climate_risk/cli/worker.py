@@ -23,6 +23,7 @@ from climate_risk.application.execucoes.processar_cenario import ProcessarCenari
 from climate_risk.application.jobs.handlers_cordex import criar_handler_processar_cordex
 from climate_risk.application.jobs.handlers_estresse_hidrico import (
     criar_handler_estresse_hidrico,
+    criar_handler_estresse_hidrico_pasta,
 )
 from climate_risk.application.jobs.handlers_noop import handler_noop
 from climate_risk.application.jobs.handlers_pontos import criar_handler_calcular_pontos
@@ -98,18 +99,16 @@ def _criar_handler_pontos_com_sessao(
     return _handler
 
 
-def _criar_handler_estresse_hidrico_com_sessao(
+def _criar_handlers_estresse_hidrico_com_sessao(
     sessionmaker: async_sessionmaker[AsyncSession],
     shapefile_path: str | None,
     cache_dir: str,
-) -> Handler:
-    """Instância preguiçosa do handler de estresse hídrico.
+) -> tuple[Handler, Handler]:
+    """Cria os dois handlers de estresse hídrico (arquivo único e pasta).
 
-    Motivo: carregar o shapefile (~50 MB) e instanciar o agregador é caro
-    — fazemos na **primeira** invocação do handler, não na inicialização
-    do worker. Isso mantém o worker inicializável mesmo quando o
-    shapefile não está configurado e só há jobs ``noop``/``processar_cordex``
-    pendentes.
+    Compartilham o mesmo ``LeitorCordexMultiVariavel`` e a mesma instância
+    preguiçosa do agregador (carregar o shapefile ~50 MB uma vez por
+    processo). Retorna o par ``(handler_arquivo, handler_pasta)``.
     """
     leitor = LeitorCordexMultiVariavel()
     agregador_cache: dict[str, AgregadorMunicipiosGeopandas] = {}
@@ -129,7 +128,7 @@ def _criar_handler_estresse_hidrico_com_sessao(
             )
         return agregador_cache["instancia"]
 
-    async def _handler(payload: dict[str, Any]) -> None:
+    async def _handler_arquivo(payload: dict[str, Any]) -> None:
         async with sessionmaker() as sessao:
             repo_execucoes = SQLAlchemyRepositorioExecucoes(sessao)
             repo_resultados = SQLAlchemyRepositorioResultadoEstresseHidrico(sessao)
@@ -141,7 +140,19 @@ def _criar_handler_estresse_hidrico_com_sessao(
             )
             await executor(payload)
 
-    return _handler
+    async def _handler_pasta(payload: dict[str, Any]) -> None:
+        async with sessionmaker() as sessao:
+            repo_execucoes = SQLAlchemyRepositorioExecucoes(sessao)
+            repo_resultados = SQLAlchemyRepositorioResultadoEstresseHidrico(sessao)
+            executor = criar_handler_estresse_hidrico_pasta(
+                leitor=leitor,
+                agregador=_obter_agregador(),
+                repositorio_execucoes=repo_execucoes,
+                repositorio_resultados=repo_resultados,
+            )
+            await executor(payload)
+
+    return _handler_arquivo, _handler_pasta
 
 
 async def _rodar_worker() -> None:
@@ -152,15 +163,17 @@ async def _rodar_worker() -> None:
     engine = criar_engine(settings.database_url)
     sessionmaker = criar_sessionmaker(engine)
 
+    handler_eh_arquivo, handler_eh_pasta = _criar_handlers_estresse_hidrico_com_sessao(
+        sessionmaker,
+        settings.shapefile_mun_path,
+        settings.cache_dir,
+    )
     handlers: dict[str, Handler] = {
         "noop": handler_noop,
         "processar_cordex": _criar_handler_cordex_com_sessao(sessionmaker),
         "calcular_pontos": _criar_handler_pontos_com_sessao(sessionmaker),
-        "processar_estresse_hidrico": _criar_handler_estresse_hidrico_com_sessao(
-            sessionmaker,
-            settings.shapefile_mun_path,
-            settings.cache_dir,
-        ),
+        "processar_estresse_hidrico": handler_eh_arquivo,
+        "processar_estresse_hidrico_pasta": handler_eh_pasta,
     }
 
     try:

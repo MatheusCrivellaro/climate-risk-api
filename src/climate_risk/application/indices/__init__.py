@@ -4,10 +4,12 @@ from climate_risk.application.indices.calcular_estresse_hidrico import (
     CalcularIndicesEstresseHidrico,
     ExecucaoIniciada,
     ParametrosCalculoEstresseHidrico,
+    ParametrosCalculoEstresseHidricoPasta,
 )
 
 __all__ = [
     "CalcularIndicesEstresseHidrico",
     "ExecucaoIniciada",
     "ParametrosCalculoEstresseHidrico",
+    "ParametrosCalculoEstresseHidricoPasta",
 ]
