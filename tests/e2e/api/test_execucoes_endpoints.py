@@ -51,7 +51,7 @@ async def test_criar_execucao_retorna_202_e_enfileira_job(
     cliente_api: AsyncClient,
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
-    resposta = await cliente_api.post("/execucoes", json=_corpo_basico())
+    resposta = await cliente_api.post("/api/execucoes", json=_corpo_basico())
 
     assert resposta.status_code == 202, resposta.text
     corpo = resposta.json()
@@ -61,8 +61,8 @@ async def test_criar_execucao_retorna_202_e_enfileira_job(
     assert job_id.startswith("job_")
     assert corpo["status"] == StatusExecucao.PENDING
     assert corpo["links"] == {
-        "self": f"/execucoes/{execucao_id}",
-        "job": f"/jobs/{job_id}",
+        "self": f"/api/execucoes/{execucao_id}",
+        "job": f"/api/jobs/{job_id}",
     }
 
     async with async_sessionmaker_() as sessao:
@@ -85,7 +85,10 @@ async def test_criar_execucao_retorna_202_e_enfileira_job(
 async def test_criar_execucao_arquivo_inexistente_retorna_404(
     cliente_api: AsyncClient,
 ) -> None:
-    resposta = await cliente_api.post("/execucoes", json=_corpo_basico(arquivo_nc="/nao/existe.nc"))
+    resposta = await cliente_api.post(
+        "/api/execucoes",
+        json=_corpo_basico(arquivo_nc="/nao/existe.nc"),
+    )
     assert resposta.status_code == 404
     corpo = resposta.json()
     assert corpo["type"].endswith("/arquivo-nc-nao-encontrado")
@@ -98,7 +101,7 @@ async def test_criar_execucao_bbox_invalida_retorna_422(
 ) -> None:
     # lat_min > lat_max dispara o validator do schema.
     resposta = await cliente_api.post(
-        "/execucoes",
+        "/api/execucoes",
         json=_corpo_basico(
             bbox={"lat_min": 10.0, "lat_max": 5.0, "lon_min": -50.0, "lon_max": -40.0}
         ),
@@ -144,12 +147,12 @@ async def test_listar_execucoes_com_filtro_por_status(
     await _inserir_execucao(async_sessionmaker_, status=StatusExecucao.PENDING)
     await _inserir_execucao(async_sessionmaker_, status=StatusExecucao.COMPLETED)
 
-    resposta = await cliente_api.get("/execucoes")
+    resposta = await cliente_api.get("/api/execucoes")
     assert resposta.status_code == 200
     corpo = resposta.json()
     assert corpo["total"] == 2
 
-    filtrado = (await cliente_api.get("/execucoes", params={"status": "pending"})).json()
+    filtrado = (await cliente_api.get("/api/execucoes", params={"status": "pending"})).json()
     assert filtrado["total"] == 1
     assert filtrado["items"][0]["status"] == StatusExecucao.PENDING
 
@@ -160,7 +163,7 @@ async def test_obter_execucao_por_id(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     eid = await _inserir_execucao(async_sessionmaker_)
-    resposta = await cliente_api.get(f"/execucoes/{eid}")
+    resposta = await cliente_api.get(f"/api/execucoes/{eid}")
     assert resposta.status_code == 200
     corpo = resposta.json()
     assert corpo["id"] == eid
@@ -169,7 +172,7 @@ async def test_obter_execucao_por_id(
 
 @pytest.mark.asyncio
 async def test_obter_execucao_inexistente_retorna_404(cliente_api: AsyncClient) -> None:
-    resposta = await cliente_api.get("/execucoes/exec_fantasma")
+    resposta = await cliente_api.get("/api/execucoes/exec_fantasma")
     assert resposta.status_code == 404
     assert resposta.json()["type"].endswith("/entidade-nao-encontrada")
 
@@ -183,7 +186,7 @@ async def test_cancelar_execucao_pending_retorna_200(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     eid = await _inserir_execucao(async_sessionmaker_, status=StatusExecucao.PENDING)
-    resposta = await cliente_api.post(f"/execucoes/{eid}/cancelar")
+    resposta = await cliente_api.post(f"/api/execucoes/{eid}/cancelar")
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["status"] == StatusExecucao.CANCELED
 
@@ -194,7 +197,7 @@ async def test_cancelar_execucao_em_estado_invalido_retorna_409(
     async_sessionmaker_: async_sessionmaker[AsyncSession],
 ) -> None:
     eid = await _inserir_execucao(async_sessionmaker_, status=StatusExecucao.COMPLETED)
-    resposta = await cliente_api.post(f"/execucoes/{eid}/cancelar")
+    resposta = await cliente_api.post(f"/api/execucoes/{eid}/cancelar")
     assert resposta.status_code == 409
     assert resposta.json()["type"].endswith("/job-estado-invalido")
 
@@ -203,5 +206,5 @@ async def test_cancelar_execucao_em_estado_invalido_retorna_409(
 async def test_cancelar_execucao_inexistente_retorna_404(
     cliente_api: AsyncClient,
 ) -> None:
-    resposta = await cliente_api.post("/execucoes/exec_fantasma/cancelar")
+    resposta = await cliente_api.post("/api/execucoes/exec_fantasma/cancelar")
     assert resposta.status_code == 404

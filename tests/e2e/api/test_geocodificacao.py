@@ -107,7 +107,7 @@ async def test_geocodificar_cache_populado_pela_primeira_chamada(
     cliente_com_cache: AsyncClient,
 ) -> None:
     resposta = await cliente_com_cache.post(
-        "/localizacoes/geocodificar",
+        "/api/localizacoes/geocodificar",
         json={
             "localizacoes": [
                 {"cidade": "São Paulo", "uf": "SP"},
@@ -129,7 +129,7 @@ async def test_geocodificar_ibge_indisponivel_retorna_api_falhou(
     cliente_ibge_indisponivel: AsyncClient,
 ) -> None:
     resposta = await cliente_ibge_indisponivel.post(
-        "/localizacoes/geocodificar",
+        "/api/localizacoes/geocodificar",
         json={"localizacoes": [{"cidade": "São Paulo", "uf": "SP"}]},
     )
     assert resposta.status_code == 200, resposta.text
@@ -142,7 +142,7 @@ async def test_geocodificar_ibge_indisponivel_retorna_api_falhou(
 async def test_admin_refresh_retorna_sumario(
     cliente_com_cache: AsyncClient,
 ) -> None:
-    resposta = await cliente_com_cache.post("/admin/ibge/refresh")
+    resposta = await cliente_com_cache.post("/api/admin/ibge/refresh")
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
     assert corpo["total_municipios"] == 2
@@ -154,7 +154,7 @@ async def test_admin_refresh_retorna_sumario(
 async def test_admin_refresh_ibge_indisponivel_retorna_503(
     cliente_ibge_indisponivel: AsyncClient,
 ) -> None:
-    resposta = await cliente_ibge_indisponivel.post("/admin/ibge/refresh")
+    resposta = await cliente_ibge_indisponivel.post("/api/admin/ibge/refresh")
     assert resposta.status_code == 503, resposta.text
     corpo = resposta.json()
     assert corpo["type"].endswith("/ibge-indisponivel")
@@ -163,5 +163,8 @@ async def test_admin_refresh_ibge_indisponivel_retorna_503(
 
 @pytest.mark.asyncio
 async def test_geocodificar_entrada_vazia_422(cliente_com_cache: AsyncClient) -> None:
-    resposta = await cliente_com_cache.post("/localizacoes/geocodificar", json={"localizacoes": []})
+    resposta = await cliente_com_cache.post(
+        "/api/localizacoes/geocodificar",
+        json={"localizacoes": []},
+    )
     assert resposta.status_code == 422

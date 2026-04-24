@@ -182,7 +182,7 @@ async def test_fluxo_cordex_completo_api_para_worker(
     fluxo_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     # Fase 1: API enfileira.
-    resposta = await fluxo_cliente.post("/execucoes", json=_corpo_bbox_pequeno())
+    resposta = await fluxo_cliente.post("/api/execucoes", json=_corpo_bbox_pequeno())
     assert resposta.status_code == 202, resposta.text
     corpo = resposta.json()
     execucao_id = corpo["execucao_id"]

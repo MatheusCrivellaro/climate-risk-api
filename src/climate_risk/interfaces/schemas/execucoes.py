@@ -104,7 +104,7 @@ class CriarExecucaoResponse(BaseModel):
     links: dict[str, str] = Field(
         ...,
         description="HATEOAS: ``self`` e ``job``.",
-        examples=[{"self": "/execucoes/exec_01HX...", "job": "/jobs/job_01HX..."}],
+        examples=[{"self": "/api/execucoes/exec_01HX...", "job": "/api/jobs/job_01HX..."}],
     )
 
 

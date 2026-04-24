@@ -53,7 +53,7 @@ async def test_localizar_dois_encontrados_um_fora(
     cliente_com_shapefile: AsyncClient,
 ) -> None:
     resposta = await cliente_com_shapefile.post(
-        "/localizacoes/localizar",
+        "/api/localizacoes/localizar",
         json={
             "pontos": [
                 {"lat": -23.55, "lon": -46.63, "identificador": "forn-1"},
@@ -76,14 +76,14 @@ async def test_localizar_dois_encontrados_um_fora(
 
 @pytest.mark.asyncio
 async def test_localizar_lote_vazio_422(cliente_com_shapefile: AsyncClient) -> None:
-    resposta = await cliente_com_shapefile.post("/localizacoes/localizar", json={"pontos": []})
+    resposta = await cliente_com_shapefile.post("/api/localizacoes/localizar", json={"pontos": []})
     assert resposta.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_localizar_lat_invalida_422(cliente_com_shapefile: AsyncClient) -> None:
     resposta = await cliente_com_shapefile.post(
-        "/localizacoes/localizar",
+        "/api/localizacoes/localizar",
         json={"pontos": [{"lat": 100.0, "lon": 0.0}]},
     )
     assert resposta.status_code == 422

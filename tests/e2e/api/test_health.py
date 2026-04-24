@@ -13,7 +13,7 @@ async def test_health_retorna_ok() -> None:
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        resposta = await client.get("/health")
+        resposta = await client.get("/api/health")
 
     assert resposta.status_code == 200
     assert resposta.json() == {"status": "ok"}

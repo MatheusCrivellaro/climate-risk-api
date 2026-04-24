@@ -42,7 +42,7 @@ async def _definir_revisao(
 async def test_ready_retorna_503_quando_sem_alembic_version(
     cliente_api: AsyncClient,
 ) -> None:
-    resposta = await cliente_api.get("/health/ready")
+    resposta = await cliente_api.get("/api/health/ready")
 
     assert resposta.status_code == 503
     corpo = resposta.json()
@@ -59,7 +59,7 @@ async def test_ready_retorna_503_com_revisao_divergente(
 ) -> None:
     await _definir_revisao(async_sessionmaker_, "revisao_invalida_xyz")
 
-    resposta = await cliente_api.get("/health/ready")
+    resposta = await cliente_api.get("/api/health/ready")
 
     assert resposta.status_code == 503
     detail = resposta.json()["detail"]
@@ -77,7 +77,7 @@ async def test_ready_retorna_200_quando_revisao_bate_com_head(
     assert head is not None
     await _definir_revisao(async_sessionmaker_, head)
 
-    resposta = await cliente_api.get("/health/ready")
+    resposta = await cliente_api.get("/api/health/ready")
 
     assert resposta.status_code == 200
     corpo = resposta.json()

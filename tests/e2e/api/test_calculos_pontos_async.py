@@ -54,7 +54,7 @@ def _corpo(pontos: list[dict[str, object]], *, arquivo_nc: str | None = None) ->
 @pytest.mark.asyncio
 async def test_limite_exato_ainda_retorna_200_sincrono(cliente_api: AsyncClient) -> None:
     limite = get_settings().sincrono_pontos_max
-    resposta = await cliente_api.post("/calculos/pontos", json=_corpo(_pontos(limite)))
+    resposta = await cliente_api.post("/api/calculos/pontos", json=_corpo(_pontos(limite)))
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
     assert corpo["total_pontos"] == limite
@@ -69,7 +69,7 @@ async def test_excede_limite_retorna_202_com_execucao_e_job(
 ) -> None:
     limite = get_settings().sincrono_pontos_max
     n = limite + 1
-    resposta = await cliente_api.post("/calculos/pontos", json=_corpo(_pontos(n)))
+    resposta = await cliente_api.post("/api/calculos/pontos", json=_corpo(_pontos(n)))
 
     assert resposta.status_code == 202, resposta.text
     corpo = resposta.json()
@@ -79,8 +79,8 @@ async def test_excede_limite_retorna_202_com_execucao_e_job(
     job_id = corpo["job_id"]
     assert isinstance(execucao_id, str) and execucao_id.startswith("exec_")
     assert isinstance(job_id, str) and job_id.startswith("job_")
-    assert corpo["links"]["self"] == f"/execucoes/{execucao_id}"
-    assert corpo["links"]["job"] == f"/jobs/{job_id}"
+    assert corpo["links"]["self"] == f"/api/execucoes/{execucao_id}"
+    assert corpo["links"]["job"] == f"/api/jobs/{job_id}"
 
     async with async_sessionmaker_() as sessao:
         execucao = (
@@ -108,7 +108,7 @@ async def test_excede_limite_retorna_202_com_execucao_e_job(
 async def test_arquivo_inexistente_ramo_async_retorna_404(cliente_api: AsyncClient) -> None:
     limite = get_settings().sincrono_pontos_max
     resposta = await cliente_api.post(
-        "/calculos/pontos",
+        "/api/calculos/pontos",
         json=_corpo(_pontos(limite + 1), arquivo_nc="/nao/existe.nc"),
     )
     assert resposta.status_code == 404
