@@ -16,6 +16,7 @@ from climate_risk.interfaces.rotas import (
     admin,
     calculos,
     cobertura,
+    estresse_hidrico,
     execucoes,
     fornecedores,
     geocoding,
@@ -62,11 +63,13 @@ def create_app() -> FastAPI:
     api.include_router(health.router)
     api.include_router(calculos.router)
     api.include_router(execucoes.router)
+    api.include_router(estresse_hidrico.router_execucoes)
     api.include_router(jobs.router)
     api.include_router(geocoding.router)
     api.include_router(cobertura.router)
     api.include_router(fornecedores.router)
     api.include_router(resultados.router)
+    api.include_router(estresse_hidrico.router_resultados)
     api.include_router(admin.router)
     app.include_router(api)
 

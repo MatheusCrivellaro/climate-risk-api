@@ -29,6 +29,9 @@ from climate_risk.application.geocodificacao import (
     GeocodificarLocalizacoes,
     RefreshCatalogoIBGE,
 )
+from climate_risk.application.indices.calcular_estresse_hidrico import (
+    CalcularIndicesEstresseHidrico,
+)
 from climate_risk.application.jobs.consultar import ConsultarJobs
 from climate_risk.application.jobs.reprocessar import ReprocessarJob
 from climate_risk.application.localizacoes import LocalizarPontos
@@ -48,6 +51,9 @@ from climate_risk.infrastructure.db.repositorios.fornecedores import (
 from climate_risk.infrastructure.db.repositorios.jobs import SQLAlchemyRepositorioJobs
 from climate_risk.infrastructure.db.repositorios.municipios import (
     SQLAlchemyRepositorioMunicipios,
+)
+from climate_risk.infrastructure.db.repositorios.resultado_estresse_hidrico import (
+    SQLAlchemyRepositorioResultadoEstresseHidrico,
 )
 from climate_risk.infrastructure.db.repositorios.resultados import (
     SQLAlchemyRepositorioResultados,
@@ -287,3 +293,21 @@ def obter_caso_uso_agregar_resultados(repo: RepoResultadosDep) -> AgregarResulta
 def obter_caso_uso_consultar_stats(repo: RepoResultadosDep) -> ConsultarStats:
     """Compõe :class:`ConsultarStats` (Slice 11)."""
     return ConsultarStats(repositorio=repo)
+
+
+def obter_repositorio_resultado_estresse_hidrico(
+    sessao: SessaoDep,
+) -> SQLAlchemyRepositorioResultadoEstresseHidrico:
+    """Repositório de resultados de estresse hídrico (Slice 15)."""
+    return SQLAlchemyRepositorioResultadoEstresseHidrico(sessao)
+
+
+def obter_caso_uso_calcular_estresse_hidrico(
+    repo_execucoes: RepoExecucoesDep,
+    fila: FilaJobsDep,
+) -> CalcularIndicesEstresseHidrico:
+    """Compõe :class:`CalcularIndicesEstresseHidrico` (Slice 15)."""
+    return CalcularIndicesEstresseHidrico(
+        repositorio_execucoes=repo_execucoes,
+        fila_jobs=fila,
+    )
