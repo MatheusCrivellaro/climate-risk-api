@@ -217,6 +217,42 @@ class ErroValidacao(ErroDominio):
         super().__init__(mensagem)
 
 
+class ErroGradeDesconhecida(ErroDominio):
+    """DataArray sem coordenadas ``lat``/``lon`` identificáveis.
+
+    Levantada pelo :class:`AgregadorEspacial` quando o ``DataArray`` não
+    expõe ``lat`` e ``lon`` nem como arrays 1D (grade regular) nem como
+    arrays 2D pré-calculados (grade rotacionada com coordenadas
+    auxiliares). Cobre casos anômalos em que o adaptador não tem como
+    mapear células → (lat, lon) sem uma desrotação customizada.
+
+    Args:
+        mensagem: Descrição com as coordenadas efetivamente disponíveis
+            no ``DataArray``, para facilitar o diagnóstico.
+    """
+
+    def __init__(self, mensagem: str) -> None:
+        super().__init__(mensagem)
+
+
+class ErroShapefileMunicipiosIndisponivel(ErroDominio):
+    """Shapefile de municípios configurado mas inacessível.
+
+    Levantada pelo adaptador de agregação espacial ao ser instanciado
+    quando o caminho configurado em ``settings.shapefile_mun_path`` não
+    existe ou não é legível. Diferente de :class:`ErroConfiguracao`, que
+    cobre o caso de configuração **ausente**, esta exceção sinaliza uma
+    configuração **presente mas inválida** — é defeito de operação, não
+    defeito de ambiente.
+
+    Args:
+        mensagem: Descrição do problema, incluindo o caminho tentado.
+    """
+
+    def __init__(self, mensagem: str) -> None:
+        super().__init__(mensagem)
+
+
 class ErroJobEstadoInvalido(ErroDominio):
     """Transição de estado não permitida para um :class:`Job`.
 

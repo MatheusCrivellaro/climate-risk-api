@@ -29,6 +29,7 @@ dependencies = [
     "geopandas>=1.0",
     "openpyxl>=3.1",
     "python-multipart>=0.0.9",
+    "pyarrow>=24.0.0",
 ]
 
 [project.optional-dependencies]
@@ -112,6 +113,7 @@ filterwarnings = [
 ]
 markers = [
     "shapefile: testes que dependem do fixture ESRI Shapefile (tests/fixtures/shapefile/).",
+    "slow: testes lentos que dependem de recursos externos pesados (shapefile IBGE real, etc.).",
 ]
 
 [tool.coverage.run]
