@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Estudo de Estresse Hídrico — Climate Risk API</title>
+    <link rel="stylesheet" href="estilos.css" />
+    <script
+      src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+      defer
+    ></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>Estudo de Estresse Hídrico</h1>
+      <p class="site-subtitle">
+        Interface simplificada para criar execuções e consultar resultados do
+        pipeline de estresse hídrico.
+      </p>
+    </header>
+
+    <main>
+      <section
+        class="card"
+        aria-labelledby="criar-titulo"
+        aria-describedby="criar-descricao"
+      >
+        <h2 id="criar-titulo">Criar nova execução de estresse hídrico</h2>
+        <p id="criar-descricao" class="muted">
+          Informe os três arquivos NetCDF (precipitação, temperatura do ar e
+          evaporação) acessíveis pelo servidor e o cenário CORDEX.
+        </p>
+
+        <form id="form-execucao" novalidate>
+          <div class="campo">
+            <label for="arquivo_pr">Arquivo de precipitação (pr)</label>
+            <input
+              type="text"
+              id="arquivo_pr"
+              name="arquivo_pr"
+              placeholder="/dados/cordex/rcp45/pr_day_BR_2026-2035.nc"
+              required
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="campo">
+            <label for="arquivo_tas">Arquivo de temperatura (tas)</label>
+            <input
+              type="text"
+              id="arquivo_tas"
+              name="arquivo_tas"
+              placeholder="/dados/cordex/rcp45/tas_day_BR_2026-2035.nc"
+              required
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="campo">
+            <label for="arquivo_evap">Arquivo de evaporação (evspsbl)</label>
+            <input
+              type="text"
+              id="arquivo_evap"
+              name="arquivo_evap"
+              placeholder="/dados/cordex/rcp45/evspsbl_day_BR_2026-2035.nc"
+              required
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="campo">
+            <label for="cenario">Cenário CORDEX</label>
+            <select id="cenario" name="cenario">
+              <option value="rcp45">rcp45</option>
+              <option value="rcp85">rcp85</option>
+            </select>
+          </div>
+
+          <details class="avancado">
+            <summary>Parâmetros avançados</summary>
+            <div class="avancado-grid">
+              <div class="campo">
+                <label for="limiar_pr_mm_dia">Limiar pr (mm/dia)</label>
+                <input
+                  type="number"
+                  id="limiar_pr_mm_dia"
+                  name="limiar_pr_mm_dia"
+                  value="1.0"
+                  step="0.5"
+                  min="0"
+                />
+                <small class="hint">Dia "seco" quando pr &le; limiar.</small>
+              </div>
+              <div class="campo">
+                <label for="limiar_tas_c">Limiar tas (°C)</label>
+                <input
+                  type="number"
+                  id="limiar_tas_c"
+                  name="limiar_tas_c"
+                  value="30.0"
+                  step="1"
+                />
+                <small class="hint">Dia "quente" quando tas &ge; limiar.</small>
+              </div>
+            </div>
+          </details>
+
+          <div class="acoes">
+            <button type="submit" id="btn-criar" class="btn btn-primario">
+              Criar execução
+            </button>
+          </div>
+
+          <div
+            id="feedback-criar"
+            class="feedback"
+            role="status"
+            aria-live="polite"
+          ></div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="resultados-titulo">
+        <h2 id="resultados-titulo">Consultar resultados</h2>
+        <p class="muted">
+          Filtre por execução, cenário, intervalo de anos ou UF.
+        </p>
+
+        <form id="form-filtros" class="filtros">
+          <div class="campo">
+            <label for="filtro-execucao">Execução</label>
+            <input
+              type="text"
+              id="filtro-execucao"
+              name="execucao_id"
+              placeholder="exec_..."
+              autocomplete="off"
+            />
+          </div>
+          <div class="campo">
+            <label for="filtro-cenario">Cenário</label>
+            <select id="filtro-cenario" name="cenario">
+              <option value="">Todos</option>
+              <option value="rcp45">rcp45</option>
+              <option value="rcp85">rcp85</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="filtro-ano-min">Ano mín.</label>
+            <input
+              type="number"
+              id="filtro-ano-min"
+              name="ano_min"
+              placeholder="2026"
+            />
+          </div>
+          <div class="campo">
+            <label for="filtro-ano-max">Ano máx.</label>
+            <input
+              type="number"
+              id="filtro-ano-max"
+              name="ano_max"
+              placeholder="2035"
+            />
+          </div>
+          <div class="campo">
+            <label for="filtro-uf">UF</label>
+            <select id="filtro-uf" name="uf">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="campo acoes-filtros">
+            <button type="submit" class="btn btn-primario">Buscar</button>
+            <button type="button" id="btn-limpar" class="btn btn-secundario">
+              Limpar filtros
+            </button>
+          </div>
+        </form>
+
+        <div
+          id="grafico-wrapper"
+          class="grafico-wrapper"
+          aria-live="polite"
+          hidden
+        >
+          <canvas id="grafico-anos" height="220"></canvas>
+        </div>
+
+        <div class="tabela-wrapper">
+          <table id="tabela-resultados" aria-describedby="contador-resultados">
+            <thead>
+              <tr>
+                <th scope="col">Município</th>
+                <th scope="col">UF</th>
+                <th scope="col">Cenário</th>
+                <th scope="col">Ano</th>
+                <th scope="col">Frequência (dias)</th>
+                <th scope="col">Intensidade (mm)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-resultados">
+              <tr class="linha-vazia">
+                <td colspan="6">
+                  Ajuste os filtros e clique em "Buscar" para carregar
+                  resultados.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="rodape-tabela">
+          <span
+            id="contador-resultados"
+            class="muted"
+            aria-live="polite"
+          ></span>
+          <div class="paginacao">
+            <button type="button" id="btn-anterior" class="btn btn-secundario" disabled>
+              Anterior
+            </button>
+            <button type="button" id="btn-proxima" class="btn btn-secundario" disabled>
+              Próxima
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>
+        <a href="/docs">API docs</a> ·
+        <a href="/app/">Interface completa</a>
+      </span>
+    </footer>
+  </body>
+</html>
