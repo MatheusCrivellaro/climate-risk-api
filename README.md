@@ -70,6 +70,28 @@ montado em `/app/`).
 Erros seguem RFC 7807 (`application/problem+json`) — ver
 `docs/desenho-api.md` para a tabela completa de códigos.
 
+## Interfaces disponíveis
+
+O projeto oferece **duas interfaces web** servidas pelo mesmo backend:
+
+### `/app/` — Interface completa (React)
+
+Painel administrativo completo, com dashboard, múltiplas execuções,
+consultas ricas, CRUD de fornecedores, geocodificação e cobertura.
+
+Requer build: `cd frontend && pnpm install && pnpm build`.
+
+### `/estudo/` — Interface simplificada (HTML puro)
+
+Página única focada **exclusivamente** no pipeline de estresse hídrico:
+formulário para criar execução + consulta de resultados com filtros e
+gráfico opcional. HTML + CSS + JS vanilla, sem build step.
+
+Ideal para demos, testes rápidos e uso sem instalar Node. Não requer
+build — funciona assim que o backend subir.
+
+Acesso: `http://localhost:8000/estudo/`.
+
 ## Frontend
 
 O projeto convive com um frontend React/Vite/TypeScript em `frontend/`.
@@ -135,7 +157,8 @@ URLs relevantes:
 
 | URL                               | O que responde                                |
 | --------------------------------- | --------------------------------------------- |
-| `http://localhost:8000/app/`      | Shell do frontend (React Router toma dali).   |
+| `http://localhost:8000/app/`      | Shell do frontend React (React Router toma dali). |
+| `http://localhost:8000/estudo/`   | Interface simplificada HTML puro (estresse hídrico). |
 | `http://localhost:8000/api/...`   | Rotas da API.                                 |
 | `http://localhost:8000/docs`      | Swagger UI.                                   |
 | `http://localhost:8000/openapi.json` | Contrato OpenAPI cru (fonte dos tipos).    |

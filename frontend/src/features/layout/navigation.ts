@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Droplet,
+  ExternalLink,
   FileText,
   LayoutDashboard,
   ListChecks,
@@ -18,6 +19,7 @@ export interface NavItem {
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   end?: boolean;
+  external?: boolean;
 }
 
 export const NAVIGATION: NavItem[] = [
@@ -32,4 +34,13 @@ export const NAVIGATION: NavItem[] = [
   { to: '/geocodificacao', label: 'Geocodificação', icon: MapPin },
   { to: '/cobertura', label: 'Cobertura', icon: Radar },
   { to: '/admin', label: 'Admin', icon: ListChecks },
+];
+
+export const NAVIGATION_EXTERNA: NavItem[] = [
+  {
+    to: '/estudo/',
+    label: 'Modo simplificado',
+    icon: ExternalLink,
+    external: true,
+  },
 ];

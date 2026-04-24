@@ -32,6 +32,10 @@ VERSAO_API = "0.0.1"
 # leva à raiz do repositório.
 FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 
+# Página "estudo" — interface HTML/CSS/JS puro focada no pipeline de
+# estresse hídrico. Convive em paralelo com o frontend React em /app/.
+ESTUDO_DIR = Path(__file__).resolve().parents[3] / "estudo"
+
 FRONTEND_NAO_BUILDADO_HTML = (
     "<h1>Frontend não disponível</h1>"
     "<p>Build do frontend não encontrado em <code>frontend/dist/</code>.</p>"
@@ -73,9 +77,26 @@ def create_app() -> FastAPI:
     api.include_router(admin.router)
     app.include_router(api)
 
+    _montar_estudo(app)
     _montar_frontend(app)
 
     return app
+
+
+def _montar_estudo(app: FastAPI) -> None:
+    """Monta a página ``/estudo/`` (HTML/CSS/JS puro) quando o diretório existe.
+
+    ``html=True`` faz o StaticFiles servir ``index.html`` automaticamente ao
+    acessar ``/estudo/`` (com ou sem barra). O mount é registrado **antes**
+    do frontend React para garantir que ``/estudo/*`` não colida com o
+    catch-all de ``/app/``.
+    """
+    if ESTUDO_DIR.exists():
+        app.mount(
+            "/estudo",
+            StaticFiles(directory=ESTUDO_DIR, html=True),
+            name="estudo",
+        )
 
 
 def _montar_frontend(app: FastAPI) -> None:
