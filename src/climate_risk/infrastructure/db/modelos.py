@@ -27,6 +27,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -132,6 +133,40 @@ class ResultadoIndiceORM(Base):
             "execucao_id",
             "ano",
             "nome_indice",
+        ),
+    )
+
+
+class ResultadoEstresseHidricoORM(Base):
+    """Tabela em formato **wide** (frequência + intensidade por linha).
+
+    Desacoplada de ``resultado_indice`` de propósito — o pipeline de
+    estresse hídrico agrega frequência e intensidade num único registro por
+    ``(execucao, municipio, ano)``. Ver :class:`ResultadoEstresseHidrico`.
+    """
+
+    __tablename__ = "resultado_estresse_hidrico"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    execucao_id: Mapped[str] = mapped_column(
+        String(40),
+        ForeignKey("execucao.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    municipio_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    ano: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    cenario: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    frequencia_dias_secos_quentes: Mapped[int] = mapped_column(Integer, nullable=False)
+    intensidade_mm: Mapped[float] = mapped_column(Float, nullable=False)
+    criado_em: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "execucao_id",
+            "municipio_id",
+            "ano",
+            name="uq_resultado_estresse_hidrico_execucao_mun_ano",
         ),
     )
 

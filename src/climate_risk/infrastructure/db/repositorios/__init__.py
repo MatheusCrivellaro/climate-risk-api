@@ -12,6 +12,9 @@ from climate_risk.infrastructure.db.repositorios.jobs import (
 from climate_risk.infrastructure.db.repositorios.municipios import (
     SQLAlchemyRepositorioMunicipios,
 )
+from climate_risk.infrastructure.db.repositorios.resultado_estresse_hidrico import (
+    SQLAlchemyRepositorioResultadoEstresseHidrico,
+)
 from climate_risk.infrastructure.db.repositorios.resultados import (
     SQLAlchemyRepositorioResultados,
 )
@@ -21,5 +24,6 @@ __all__ = [
     "SQLAlchemyRepositorioFornecedores",
     "SQLAlchemyRepositorioJobs",
     "SQLAlchemyRepositorioMunicipios",
+    "SQLAlchemyRepositorioResultadoEstresseHidrico",
     "SQLAlchemyRepositorioResultados",
 ]
