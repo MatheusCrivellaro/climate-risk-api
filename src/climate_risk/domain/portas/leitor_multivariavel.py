@@ -18,6 +18,33 @@ from typing import Protocol
 from climate_risk.domain.entidades.dados_multivariaveis import DadosClimaticosMultiVariaveis
 
 
+class LeitorMultiVariavelPasta(Protocol):
+    """Variante do :class:`LeitorMultiVariavel` que lê **pastas** (Slice 17).
+
+    Cada pasta contém um ou mais arquivos ``.nc`` da mesma variável e
+    cenário. A implementação concatena no eixo ``time``, valida que cada
+    arquivo declara o ``cenario_esperado`` e devolve a entidade com as três
+    séries alinhadas.
+    """
+
+    def abrir_de_pastas(
+        self,
+        pasta_pr: Path,
+        pasta_tas: Path,
+        pasta_evap: Path,
+        cenario_esperado: str,
+    ) -> DadosClimaticosMultiVariaveis:
+        """Concatena ``.nc`` das três pastas e valida cenário declarado.
+
+        Raises:
+            ErroPastaVazia: alguma pasta não contém ``.nc``.
+            ErroCenarioInconsistente: arquivo declara cenário diferente
+                de ``cenario_esperado``.
+            ErroLeituraNetCDF: interseção temporal entre pr/tas/evap vazia.
+        """
+        ...
+
+
 class LeitorMultiVariavel(Protocol):
     """Contrato para leitura coordenada de três arquivos CORDEX.
 

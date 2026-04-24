@@ -278,6 +278,27 @@ class ErroCenarioInconsistente(ErroDominio):
         )
 
 
+class ErroPastaVazia(ErroDominio):
+    """Pasta informada não contém arquivos NetCDF.
+
+    Levantada pelo :class:`LeitorCordexMultiVariavel.abrir_de_pastas`
+    (Slice 17) quando uma pasta de variável (pr/tas/evap) existe mas
+    não contém nenhum arquivo ``.nc``. O middleware HTTP traduz para
+    ``422`` — é erro de uso: o operador apontou para uma pasta sem dados.
+
+    Args:
+        caminho: Caminho da pasta vazia.
+        variavel: Nome da variável esperada na pasta (``"pr"``, ``"tas"``
+            ou ``"evspsbl"``), apenas para diagnóstico.
+    """
+
+    def __init__(self, caminho: Path | str, variavel: str | None = None) -> None:
+        self.caminho = str(caminho)
+        self.variavel = variavel
+        sufixo = f" (variável esperada: {variavel})" if variavel else ""
+        super().__init__(f"Pasta '{self.caminho}' não contém arquivos .nc{sufixo}.")
+
+
 class ErroJobEstadoInvalido(ErroDominio):
     """Transição de estado não permitida para um :class:`Job`.
 

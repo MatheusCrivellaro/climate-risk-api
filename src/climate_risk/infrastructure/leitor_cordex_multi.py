@@ -35,6 +35,7 @@ from climate_risk.domain.excecoes import (
     ErroArquivoNCNaoEncontrado,
     ErroCenarioInconsistente,
     ErroLeituraNetCDF,
+    ErroPastaVazia,
     ErroVariavelAusente,
 )
 
@@ -240,6 +241,128 @@ class LeitorCordexMultiVariavel:
                 with contextlib.suppress(Exception):
                     ds.close()
 
+    def abrir_de_pastas(
+        self,
+        pasta_pr: Path,
+        pasta_tas: Path,
+        pasta_evap: Path,
+        cenario_esperado: str,
+    ) -> DadosClimaticosMultiVariaveis:
+        """Lê todos os ``.nc`` das três pastas, concatena no tempo e valida cenário.
+
+        Cada pasta deve conter um ou mais arquivos NetCDF da mesma variável
+        principal (``pr``/``tas``/``evspsbl``) e do mesmo cenário CORDEX. Os
+        arquivos são abertos individualmente, validados quanto ao cenário
+        declarado (``cenario_esperado``) e concatenados no eixo ``time``.
+
+        Args:
+            pasta_pr: Diretório com arquivos de precipitação.
+            pasta_tas: Diretório com arquivos de temperatura do ar.
+            pasta_evap: Diretório com arquivos de evaporação.
+            cenario_esperado: Rótulo do cenário (``"rcp45"``/``"rcp85"``/...).
+                Cada arquivo deve declarar (via ``experiment_id`` ou nome)
+                este mesmo cenário, em case-insensitive.
+
+        Raises:
+            ErroPastaVazia: alguma pasta não contém ``.nc``.
+            ErroCenarioInconsistente: algum arquivo declara cenário diferente.
+            ErroLeituraNetCDF: interseção temporal entre as 3 variáveis vazia.
+        """
+        cenario_normalizado = cenario_esperado.strip().lower()
+        rotulos: tuple[tuple[str, str, Path], ...] = (
+            ("pr", "precipitacao", pasta_pr),
+            ("tas", "temperatura", pasta_tas),
+            ("evspsbl", "evaporacao", pasta_evap),
+        )
+        datasets_abertos: list[xr.Dataset] = []
+        try:
+            arrays_por_var: dict[str, xr.DataArray] = {}
+            for var_canonica, rotulo, pasta in rotulos:
+                arquivos = self._listar_nc_ordenados(pasta, var_canonica)
+                arrays_arquivo: list[xr.DataArray] = []
+                cenarios_divergentes: dict[str, str] = {}
+                for arquivo in arquivos:
+                    ds = self._abrir_dataset(arquivo)
+                    datasets_abertos.append(ds)
+                    cenario_arq = _inferir_cenario_arquivo(str(arquivo), ds)
+                    if cenario_arq != "unknown" and cenario_arq != cenario_normalizado:
+                        cenarios_divergentes[str(arquivo)] = cenario_arq
+                    da = self._extrair_e_padronizar(ds, arquivo, esperada=var_canonica)
+                    arrays_arquivo.append(da)
+                if cenarios_divergentes:
+                    cenarios_divergentes[f"<pasta {rotulo}>"] = cenario_normalizado
+                    raise ErroCenarioInconsistente(cenarios_divergentes)
+                arrays_por_var[var_canonica] = self._concatenar_no_tempo(
+                    arrays_arquivo, var_canonica
+                )
+
+            da_pr = arrays_por_var["pr"]
+            da_tas = arrays_por_var["tas"]
+            da_evap = arrays_por_var["evspsbl"]
+
+            tempo_comum = self._intersectar_tempo(da_pr, da_tas, da_evap)
+            if len(tempo_comum) == 0:
+                raise ErroLeituraNetCDF(
+                    caminho=str(pasta_pr),
+                    detalhe=(
+                        "interseção temporal vazia entre pr/tas/evap "
+                        f"(ranges: pr=[{_range_str(da_pr)}], "
+                        f"tas=[{_range_str(da_tas)}], evap=[{_range_str(da_evap)}])."
+                    ),
+                )
+
+            da_pr = da_pr.sel(time=tempo_comum).load()
+            da_tas = da_tas.sel(time=tempo_comum).load()
+            da_evap = da_evap.sel(time=tempo_comum).load()
+
+            entidade = DadosClimaticosMultiVariaveis(
+                precipitacao_diaria_mm=da_pr,
+                temperatura_diaria_c=da_tas,
+                evaporacao_diaria_mm=da_evap,
+                tempo=tempo_comum,
+                cenario=cenario_normalizado,
+            )
+            entidade.validar()
+            return entidade
+        finally:
+            for ds in datasets_abertos:
+                with contextlib.suppress(Exception):
+                    ds.close()
+
+    @staticmethod
+    def _listar_nc_ordenados(pasta: Path, variavel: str) -> list[Path]:
+        if not pasta.exists() or not pasta.is_dir():
+            raise ErroPastaVazia(caminho=pasta, variavel=variavel)
+        arquivos = sorted(pasta.glob("*.nc"))
+        if not arquivos:
+            raise ErroPastaVazia(caminho=pasta, variavel=variavel)
+        return arquivos
+
+    def _concatenar_no_tempo(self, arrays: list[xr.DataArray], variavel: str) -> xr.DataArray:
+        """Concatena ``DataArray`` no eixo ``time``, ordena e remove duplicatas.
+
+        Sobreposição (timestamps repetidos em arquivos diferentes) é resolvida
+        mantendo o **primeiro** registro encontrado e logando warning. Mantemos
+        a heurística simples — não tentamos detectar conflitos de valor.
+        """
+        if len(arrays) == 1:
+            return arrays[0]
+        concatenado = xr.concat(arrays, dim="time")
+        tempos = pd.DatetimeIndex(concatenado["time"].values)
+        if not tempos.is_monotonic_increasing:
+            concatenado = concatenado.sortby("time")
+            tempos = pd.DatetimeIndex(concatenado["time"].values)
+        duplicados = tempos.duplicated(keep="first")
+        if bool(duplicados.any()):
+            n_dup = int(duplicados.sum())
+            logger.warning(
+                "Concatenação de %s: %d timestamps duplicados; mantendo o primeiro.",
+                variavel,
+                n_dup,
+            )
+            concatenado = concatenado.isel(time=~duplicados)
+        return concatenado
+
     def _abrir_dataset(self, caminho: Path) -> xr.Dataset:
         """Abre o ``.nc`` com ``use_cftime=True`` para suportar calendários exóticos."""
         kwargs: dict[str, Any] = {
@@ -309,3 +432,10 @@ class LeitorCordexMultiVariavel:
         if len(valores) == 1:
             return next(iter(valores))
         raise ErroCenarioInconsistente(cenarios_por_caminho)
+
+
+def _range_str(da: xr.DataArray) -> str:
+    if "time" not in da.dims or da.sizes.get("time", 0) == 0:
+        return "vazio"
+    tempos = pd.DatetimeIndex(da["time"].values)
+    return f"{tempos.min().date()}..{tempos.max().date()}"
