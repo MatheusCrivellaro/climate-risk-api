@@ -253,7 +253,8 @@ class ErroShapefileMunicipiosIndisponivel(ErroDominio):
 
     def __init__(self, mensagem: str) -> None:
         super().__init__(mensagem)
-        
+
+
 class ErroCenarioInconsistente(ErroDominio):
     """Arquivos de um mesmo lote multi-variável reportam cenários diferentes.
 
