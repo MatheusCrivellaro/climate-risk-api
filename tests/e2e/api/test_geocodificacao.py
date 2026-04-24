@@ -163,5 +163,8 @@ async def test_admin_refresh_ibge_indisponivel_retorna_503(
 
 @pytest.mark.asyncio
 async def test_geocodificar_entrada_vazia_422(cliente_com_cache: AsyncClient) -> None:
-    resposta = await cliente_com_cache.post("/api/localizacoes/geocodificar", json={"localizacoes": []})
+    resposta = await cliente_com_cache.post(
+        "/api/localizacoes/geocodificar",
+        json={"localizacoes": []},
+    )
     assert resposta.status_code == 422
