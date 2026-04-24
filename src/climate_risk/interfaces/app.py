@@ -91,13 +91,13 @@ def _montar_frontend(app: FastAPI) -> None:
 
         @app.get("/app", include_in_schema=False)
         @app.get("/app/{full_path:path}", include_in_schema=False)
-        async def servir_frontend(full_path: str = "") -> FileResponse:  # noqa: ARG001
+        async def servir_frontend(full_path: str = "") -> FileResponse:
             return FileResponse(index_html)
     else:
 
         @app.get("/app", include_in_schema=False)
         @app.get("/app/{full_path:path}", include_in_schema=False)
-        async def frontend_nao_buildado(full_path: str = "") -> HTMLResponse:  # noqa: ARG001
+        async def frontend_nao_buildado(full_path: str = "") -> HTMLResponse:
             return HTMLResponse(status_code=503, content=FRONTEND_NAO_BUILDADO_HTML)
 
 
