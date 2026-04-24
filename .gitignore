@@ -212,6 +212,9 @@ climate_risk.db
 *.db-shm
 *.db-wal
 
+# Caches gerados em runtime (mapa célula→município por grade).
+data/caches/*.parquet
+
 # frontend/ (projeto Node dentro do repo)
 frontend/node_modules/
 #frontend/dist/

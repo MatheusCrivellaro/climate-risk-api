@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     ibge_max_retries: int = 3
     shapefile_uf_path: str | None = None
     shapefile_mun_path: str | None = None
+    cache_dir: str = "data/caches"
     sincrono_pontos_max: int = 100
 
 
