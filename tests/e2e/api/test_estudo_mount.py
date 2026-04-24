@@ -19,6 +19,19 @@ async def test_estudo_index_retorna_html(cliente_api: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_estudo_index_tem_seis_campos_de_pasta(cliente_api: AsyncClient) -> None:
+    """Slice 17: a página deve ter os 6 campos (3 vars x 2 cenarios)."""
+    resposta = await cliente_api.get("/estudo/")
+    assert resposta.status_code == 200
+    html = resposta.text
+    for cenario in ("rcp45", "rcp85"):
+        for var in ("pr", "tas", "evap"):
+            assert f'id="{cenario}-pasta-{var}"' in html, (
+                f"campo {cenario}-pasta-{var} não encontrado no HTML"
+            )
+
+
+@pytest.mark.asyncio
 async def test_estudo_serve_estilos_css(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.get("/estudo/estilos.css")
     assert resposta.status_code == 200
@@ -32,7 +45,7 @@ async def test_estudo_serve_app_js(cliente_api: AsyncClient) -> None:
     assert resposta.status_code == 200
     ctype = resposta.headers["content-type"]
     assert ctype.startswith("text/javascript") or ctype.startswith("application/javascript")
-    assert "criarExecucao" in resposta.text
+    assert "criarExecucoes" in resposta.text
 
 
 @pytest.mark.asyncio

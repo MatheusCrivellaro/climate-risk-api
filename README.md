@@ -59,7 +59,7 @@ montado em `/app/`).
 |---|---|
 | Health | `GET /api/health` (liveness), `GET /api/health/ready` (banco + migrações `head`). |
 | Cálculo síncrono | `POST /api/calculos/pontos` — até 100 pontos; pura, não persiste. |
-| Execuções assíncronas | `POST /api/execucoes` (CORDEX em grade), `POST /api/execucoes/pontos` (lote grande de pontos), `GET /api/execucoes`, `GET /api/execucoes/{id}`, `DELETE /api/execucoes/{id}`. |
+| Execuções assíncronas | `POST /api/execucoes` (CORDEX em grade), `POST /api/execucoes/pontos` (lote grande de pontos), `POST /api/execucoes/estresse-hidrico` (3 arquivos), `POST /api/execucoes/estresse-hidrico/em-lote` (6 pastas → rcp45 + rcp85), `GET /api/execucoes`, `GET /api/execucoes/{id}`, `DELETE /api/execucoes/{id}`. |
 | Jobs (fila) | `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/retry`. |
 | Resultados | `GET /api/resultados`, `GET /api/resultados/agregados`, `GET /api/resultados/stats`. |
 | Geocodificação | `POST /api/localizacoes/geocodificar`, `POST /api/localizacoes/pontos`. |
@@ -83,9 +83,12 @@ Requer build: `cd frontend && pnpm install && pnpm build`.
 
 ### `/estudo/` — Interface simplificada (HTML puro)
 
-Página única focada **exclusivamente** no pipeline de estresse hídrico:
-formulário para criar execução + consulta de resultados com filtros e
-gráfico opcional. HTML + CSS + JS vanilla, sem build step.
+Página única focada **exclusivamente** no pipeline de estresse hídrico.
+Aceita 6 pastas (3 variáveis × 2 cenários: `rcp45` e `rcp85`) e cria as
+duas execuções num único clique via
+`POST /api/execucoes/estresse-hidrico/em-lote`. Cada pasta pode conter
+múltiplos `.nc` que são concatenados no eixo temporal pelo backend.
+HTML + CSS + JS vanilla, sem build step.
 
 Ideal para demos, testes rápidos e uso sem instalar Node. Não requer
 build — funciona assim que o backend subir.

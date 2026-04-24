@@ -15,8 +15,8 @@
     <header class="site-header">
       <h1>Estudo de Estresse Hídrico</h1>
       <p class="site-subtitle">
-        Interface simplificada para criar execuções e consultar resultados do
-        pipeline de estresse hídrico.
+        Aponte para as pastas com os arquivos NetCDF (uma pasta por
+        variável e cenário) e dispare as duas execuções num único clique.
       </p>
     </header>
 
@@ -26,66 +26,92 @@
         aria-labelledby="criar-titulo"
         aria-describedby="criar-descricao"
       >
-        <h2 id="criar-titulo">Criar nova execução de estresse hídrico</h2>
+        <h2 id="criar-titulo">Criar execuções (rcp45 + rcp85)</h2>
         <p id="criar-descricao" class="muted">
-          Informe os três arquivos NetCDF (precipitação, temperatura do ar e
-          evaporação) acessíveis pelo servidor e o cenário CORDEX.
+          Cada pasta deve conter um ou mais arquivos <code>.nc</code> da
+          variável correspondente. Os arquivos são concatenados no eixo
+          temporal e validados quanto ao cenário declarado.
         </p>
 
-        <form id="form-execucao" novalidate>
-          <div class="campo">
-            <label for="arquivo_pr">Arquivo de precipitação (pr)</label>
-            <input
-              type="text"
-              id="arquivo_pr"
-              name="arquivo_pr"
-              placeholder="/dados/cordex/rcp45/pr_day_BR_2026-2035.nc"
-              required
-              autocomplete="off"
-            />
-          </div>
+        <form id="form-criar-execucoes" novalidate>
+          <div class="cards-cenarios">
+            <div class="card-cenario card-cenario--rcp45">
+              <h3>Cenário rcp45 (moderado)</h3>
+              <div class="campo">
+                <label for="rcp45-pasta-pr">Pasta de pr (precipitação)</label>
+                <input
+                  type="text"
+                  id="rcp45-pasta-pr"
+                  required
+                  autocomplete="off"
+                  placeholder="C:\dados\pr\rcp45"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp45-pasta-tas">Pasta de tas (temperatura)</label>
+                <input
+                  type="text"
+                  id="rcp45-pasta-tas"
+                  required
+                  autocomplete="off"
+                  placeholder="C:\dados\tas\rcp45"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp45-pasta-evap">Pasta de evspsbl (evaporação)</label>
+                <input
+                  type="text"
+                  id="rcp45-pasta-evap"
+                  required
+                  autocomplete="off"
+                  placeholder="C:\dados\evap\rcp45"
+                />
+              </div>
+            </div>
 
-          <div class="campo">
-            <label for="arquivo_tas">Arquivo de temperatura (tas)</label>
-            <input
-              type="text"
-              id="arquivo_tas"
-              name="arquivo_tas"
-              placeholder="/dados/cordex/rcp45/tas_day_BR_2026-2035.nc"
-              required
-              autocomplete="off"
-            />
-          </div>
-
-          <div class="campo">
-            <label for="arquivo_evap">Arquivo de evaporação (evspsbl)</label>
-            <input
-              type="text"
-              id="arquivo_evap"
-              name="arquivo_evap"
-              placeholder="/dados/cordex/rcp45/evspsbl_day_BR_2026-2035.nc"
-              required
-              autocomplete="off"
-            />
-          </div>
-
-          <div class="campo">
-            <label for="cenario">Cenário CORDEX</label>
-            <select id="cenario" name="cenario">
-              <option value="rcp45">rcp45</option>
-              <option value="rcp85">rcp85</option>
-            </select>
+            <div class="card-cenario card-cenario--rcp85">
+              <h3>Cenário rcp85 (extremo)</h3>
+              <div class="campo">
+                <label for="rcp85-pasta-pr">Pasta de pr (precipitação)</label>
+                <input
+                  type="text"
+                  id="rcp85-pasta-pr"
+                  required
+                  autocomplete="off"
+                  placeholder="C:\dados\pr\rcp85"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp85-pasta-tas">Pasta de tas (temperatura)</label>
+                <input
+                  type="text"
+                  id="rcp85-pasta-tas"
+                  required
+                  autocomplete="off"
+                  placeholder="C:\dados\tas\rcp85"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp85-pasta-evap">Pasta de evspsbl (evaporação)</label>
+                <input
+                  type="text"
+                  id="rcp85-pasta-evap"
+                  required
+                  autocomplete="off"
+                  placeholder="C:\dados\evap\rcp85"
+                />
+              </div>
+            </div>
           </div>
 
           <details class="avancado">
             <summary>Parâmetros avançados</summary>
             <div class="avancado-grid">
               <div class="campo">
-                <label for="limiar_pr_mm_dia">Limiar pr (mm/dia)</label>
+                <label for="limiar-pr">Limiar pr (mm/dia)</label>
                 <input
                   type="number"
-                  id="limiar_pr_mm_dia"
-                  name="limiar_pr_mm_dia"
+                  id="limiar-pr"
                   value="1.0"
                   step="0.5"
                   min="0"
@@ -93,11 +119,10 @@
                 <small class="hint">Dia "seco" quando pr &le; limiar.</small>
               </div>
               <div class="campo">
-                <label for="limiar_tas_c">Limiar tas (°C)</label>
+                <label for="limiar-tas">Limiar tas (°C)</label>
                 <input
                   type="number"
-                  id="limiar_tas_c"
-                  name="limiar_tas_c"
+                  id="limiar-tas"
                   value="30.0"
                   step="1"
                 />
@@ -108,14 +133,20 @@
 
           <div class="acoes">
             <button type="submit" id="btn-criar" class="btn btn-primario">
-              Criar execução
+              Criar execuções
             </button>
           </div>
 
           <div
-            id="feedback-criar"
+            id="erro-global"
             class="feedback"
             role="status"
+            aria-live="polite"
+          ></div>
+
+          <div
+            id="status-execucoes"
+            class="status-execucoes"
             aria-live="polite"
           ></div>
         </form>

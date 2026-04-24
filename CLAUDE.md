@@ -29,6 +29,21 @@ Motivos da decisão:
 - Consultas agregadas (ex.: médias ponderadas) ficam triviais em wide.
 - Mantém o pipeline de precipitação extrema inalterado.
 
+## Página `/estudo/` — modo lote
+
+Página `/estudo/` opera no modo "lote": aceita 6 pastas (3 variáveis × 2
+cenários) e cria 2 execuções por submit, via
+`POST /api/execucoes/estresse-hidrico/em-lote`. O endpoint antigo
+`POST /api/execucoes/estresse-hidrico` (arquivo único) continua existindo
+para uso programático com arquivo único.
+
+O leitor (`LeitorCordexMultiVariavel`) tem dois métodos:
+
+- `abrir(pr, tas, evap)` — três arquivos individuais (Slice 13).
+- `abrir_de_pastas(pasta_pr, pasta_tas, pasta_evap, cenario_esperado)` —
+  concatena todos os `.nc` de cada pasta no eixo temporal e valida que
+  cada arquivo declara o `cenario_esperado` (Slice 17).
+
 ## Convenções
 
 - Arquitetura hexagonal com camadas explícitas (ADR-005): `domain`,

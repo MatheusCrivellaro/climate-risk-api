@@ -1,6 +1,7 @@
 // Página /estudo/ — JavaScript vanilla.
-// Consome os endpoints /api/execucoes/estresse-hidrico e
-// /api/resultados/estresse-hidrico já existentes.
+// Slice 17: 6 pastas (3 vars × 2 cenários) → POST /em-lote → 2 execuções
+// independentes com polling paralelo. Consulta de resultados igual à
+// Slice 16.
 
 'use strict';
 
@@ -8,6 +9,7 @@ const API_BASE = '/api';
 const POLLING_INTERVAL_MS = 3000;
 const PAGINA_TAMANHO = 50;
 const STATUSES_FINAIS = new Set(['completed', 'failed', 'canceled']);
+const CENARIOS = ['rcp45', 'rcp85'];
 
 const UFS = [
   'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -16,8 +18,9 @@ const UFS = [
 ];
 
 const state = {
-  execucaoAtual: null,
-  pollingTimer: null,
+  // Map<cenario, {execucao_id, statusAtual, jobId, erro?}>
+  execucoesAtivas: new Map(),
+  pollingTimers: new Map(), // Map<cenario, intervalId>
   paginaAtual: 0,
   totalResultados: 0,
   filtrosAtivos: {},
@@ -25,7 +28,7 @@ const state = {
 };
 
 // -------------------------------------------------------------------------
-// Helpers genéricos
+// Helpers
 // -------------------------------------------------------------------------
 
 function qs(id) {
@@ -33,9 +36,7 @@ function qs(id) {
 }
 
 function formatarNumero(valor, casas = 2) {
-  if (valor === null || valor === undefined || Number.isNaN(valor)) {
-    return '—';
-  }
+  if (valor === null || valor === undefined || Number.isNaN(valor)) return '—';
   return Number(valor).toLocaleString('pt-BR', {
     minimumFractionDigits: casas,
     maximumFractionDigits: casas,
@@ -50,6 +51,11 @@ function escapeHtml(valor) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function limparAspasDuplas(valor) {
+  // O "Copiar como caminho" do Windows insere aspas no início e fim.
+  return valor.replace(/^"+|"+$/g, '').trim();
 }
 
 async function chamarApi(path, options = {}) {
@@ -72,31 +78,53 @@ async function chamarApi(path, options = {}) {
 }
 
 // -------------------------------------------------------------------------
-// Seção 1: criar execução + polling
+// Seção 1: criar execuções em lote + polling paralelo
 // -------------------------------------------------------------------------
 
-async function criarExecucao(event) {
+function lerCampoPasta(idPrefixo, sufixo) {
+  return limparAspasDuplas(qs(`${idPrefixo}-pasta-${sufixo}`).value);
+}
+
+async function criarExecucoes(event) {
   event.preventDefault();
-  pararPolling();
+  pararTodosPollings();
+  state.execucoesAtivas = new Map();
+  qs('status-execucoes').innerHTML = '';
 
-  const feedback = qs('feedback-criar');
-  feedback.className = 'feedback';
-  feedback.textContent = '';
+  const erroGlobal = qs('erro-global');
+  erroGlobal.className = 'feedback';
+  erroGlobal.textContent = '';
 
-  const form = event.currentTarget;
-  const dados = {
-    arquivo_pr: form.arquivo_pr.value.trim(),
-    arquivo_tas: form.arquivo_tas.value.trim(),
-    arquivo_evap: form.arquivo_evap.value.trim(),
-    cenario: form.cenario.value,
-    parametros: {
-      limiar_pr_mm_dia: Number(form.limiar_pr_mm_dia.value),
-      limiar_tas_c: Number(form.limiar_tas_c.value),
-    },
+  const params = {
+    limiar_pr_mm_dia: Number(qs('limiar-pr').value) || 1.0,
+    limiar_tas_c: Number(qs('limiar-tas').value) || 30.0,
   };
 
-  if (!dados.arquivo_pr || !dados.arquivo_tas || !dados.arquivo_evap) {
-    mostrarFeedbackErro('Informe os três caminhos de arquivo.');
+  const body = {
+    rcp45: {
+      pasta_pr: lerCampoPasta('rcp45', 'pr'),
+      pasta_tas: lerCampoPasta('rcp45', 'tas'),
+      pasta_evap: lerCampoPasta('rcp45', 'evap'),
+    },
+    rcp85: {
+      pasta_pr: lerCampoPasta('rcp85', 'pr'),
+      pasta_tas: lerCampoPasta('rcp85', 'tas'),
+      pasta_evap: lerCampoPasta('rcp85', 'evap'),
+    },
+    parametros: params,
+  };
+
+  const camposVazios = [];
+  for (const cenario of CENARIOS) {
+    for (const campo of ['pasta_pr', 'pasta_tas', 'pasta_evap']) {
+      if (!body[cenario][campo]) {
+        camposVazios.push(`${cenario}.${campo}`);
+      }
+    }
+  }
+  if (camposVazios.length > 0) {
+    erroGlobal.className = 'feedback feedback-erro';
+    erroGlobal.textContent = `Preencha todas as 6 pastas (faltando: ${camposVazios.join(', ')}).`;
     return;
   }
 
@@ -105,100 +133,132 @@ async function criarExecucao(event) {
   botao.textContent = 'Criando...';
 
   try {
-    const resposta = await chamarApi('/execucoes/estresse-hidrico', {
+    const resposta = await chamarApi('/execucoes/estresse-hidrico/em-lote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(dados),
+      body: JSON.stringify(body),
     });
-    state.execucaoAtual = {
-      id: resposta.execucao_id,
-      jobId: resposta.job_id,
-      status: resposta.status,
-    };
-    renderizarFeedbackExecucao();
-    iniciarPolling(resposta.execucao_id);
+    for (const item of resposta.execucoes) {
+      state.execucoesAtivas.set(item.cenario, {
+        execucaoId: item.execucao_id,
+        statusAtual: item.status,
+        jobId: item.job_id,
+        erro: item.erro,
+      });
+    }
+    renderizarStatusExecucoes();
+    iniciarPollingMultiplo();
   } catch (erro) {
-    mostrarFeedbackErro(erro.message || 'Falha ao criar execução.');
+    erroGlobal.className = 'feedback feedback-erro';
+    erroGlobal.textContent = erro.message || 'Falha ao criar execuções.';
   } finally {
     botao.disabled = false;
-    botao.textContent = 'Criar execução';
+    botao.textContent = 'Criar execuções';
   }
 }
 
-function mostrarFeedbackErro(mensagem) {
-  const feedback = qs('feedback-criar');
-  feedback.className = 'feedback feedback-erro';
-  feedback.textContent = mensagem;
-}
-
-function renderizarFeedbackExecucao() {
-  const feedback = qs('feedback-criar');
-  const exec = state.execucaoAtual;
-  if (!exec) {
-    feedback.className = 'feedback';
-    feedback.textContent = '';
+function renderizarStatusExecucoes() {
+  const wrapper = qs('status-execucoes');
+  if (state.execucoesAtivas.size === 0) {
+    wrapper.innerHTML = '';
     return;
   }
-  feedback.className = 'feedback feedback-info';
-  feedback.innerHTML = `
-    <span>Execução: <code>${escapeHtml(exec.id)}</code></span>
-    <span class="status-badge status-${escapeHtml(exec.status)}">${escapeHtml(exec.status)}</span>
-    <button type="button" id="btn-ver-resultados" class="btn btn-sucesso">
-      Ver resultados
-    </button>
-  `;
-  const botaoVer = qs('btn-ver-resultados');
-  if (botaoVer) {
-    botaoVer.addEventListener('click', () => irParaResultadosDaExecucao(exec.id));
+  const html = CENARIOS.map((cenario) => {
+    const info = state.execucoesAtivas.get(cenario);
+    if (!info) return '';
+    if (info.erro) {
+      return `
+        <div class="status-execucao status-execucao--${cenario} status-execucao--erro">
+          <h4>${escapeHtml(cenario)}</h4>
+          <div class="meta">
+            <span>Falha:</span>
+            <span>${escapeHtml(info.erro)}</span>
+          </div>
+        </div>
+      `;
+    }
+    const id = info.execucaoId ?? '—';
+    const statusBadge = info.statusAtual
+      ? `<span class="status-badge status-${escapeHtml(info.statusAtual)}">${escapeHtml(info.statusAtual)}</span>`
+      : '';
+    return `
+      <div class="status-execucao status-execucao--${cenario}">
+        <h4>${escapeHtml(cenario)}</h4>
+        <div class="meta">
+          <code>${escapeHtml(id)}</code>
+          ${statusBadge}
+        </div>
+      </div>
+    `;
+  }).join('');
+  wrapper.innerHTML = html;
+}
+
+function iniciarPollingMultiplo() {
+  for (const [cenario, info] of state.execucoesAtivas.entries()) {
+    if (info.erro || !info.execucaoId) continue;
+    if (info.statusAtual && STATUSES_FINAIS.has(info.statusAtual)) continue;
+    const timer = setInterval(
+      () => atualizarStatusCenario(cenario),
+      POLLING_INTERVAL_MS,
+    );
+    state.pollingTimers.set(cenario, timer);
+  }
+  if (state.pollingTimers.size === 0) {
+    aoTerminarTodosOsPollings();
   }
 }
 
-function iniciarPolling(execucaoId) {
-  pararPolling();
-  state.pollingTimer = setInterval(
-    () => atualizarStatusExecucao(execucaoId),
-    POLLING_INTERVAL_MS,
-  );
-}
-
-function pararPolling() {
-  if (state.pollingTimer !== null) {
-    clearInterval(state.pollingTimer);
-    state.pollingTimer = null;
+function pararPolling(cenario) {
+  const timer = state.pollingTimers.get(cenario);
+  if (timer !== undefined) {
+    clearInterval(timer);
+    state.pollingTimers.delete(cenario);
   }
 }
 
-async function atualizarStatusExecucao(execucaoId) {
+function pararTodosPollings() {
+  for (const cenario of [...state.pollingTimers.keys()]) {
+    pararPolling(cenario);
+  }
+}
+
+async function atualizarStatusCenario(cenario) {
+  const info = state.execucoesAtivas.get(cenario);
+  if (!info || !info.execucaoId) {
+    pararPolling(cenario);
+    return;
+  }
   try {
     const resposta = await chamarApi(
-      `/execucoes/${encodeURIComponent(execucaoId)}`,
+      `/execucoes/${encodeURIComponent(info.execucaoId)}`,
     );
-    if (!state.execucaoAtual || state.execucaoAtual.id !== execucaoId) {
-      pararPolling();
-      return;
-    }
-    state.execucaoAtual.status = resposta.status;
-    renderizarFeedbackExecucao();
+    info.statusAtual = resposta.status;
+    state.execucoesAtivas.set(cenario, info);
+    renderizarStatusExecucoes();
     if (STATUSES_FINAIS.has(resposta.status)) {
-      pararPolling();
-      if (resposta.status === 'completed') {
-        irParaResultadosDaExecucao(execucaoId);
+      pararPolling(cenario);
+      if (state.pollingTimers.size === 0) {
+        aoTerminarTodosOsPollings();
       }
     }
   } catch (erro) {
-    pararPolling();
-    mostrarFeedbackErro(
-      `Falha ao consultar status da execução: ${erro.message || erro}`,
-    );
+    pararPolling(cenario);
+    info.erro = erro.message || String(erro);
+    state.execucoesAtivas.set(cenario, info);
+    renderizarStatusExecucoes();
   }
 }
 
-function irParaResultadosDaExecucao(execucaoId) {
-  qs('filtro-execucao').value = execucaoId;
+function aoTerminarTodosOsPollings() {
+  // Quando todas as execuções terminaram, descer para resultados.
+  // Usa só filtro de cenário/anos, sem fixar execucao_id (são duas).
+  const algumaCompleted = [...state.execucoesAtivas.values()].some(
+    (info) => info.statusAtual === 'completed',
+  );
+  if (!algumaCompleted) return;
+  qs('filtro-execucao').value = '';
   qs('filtro-cenario').value = '';
-  qs('filtro-ano-min').value = '';
-  qs('filtro-ano-max').value = '';
-  qs('filtro-uf').value = '';
   qs('resultados-titulo').scrollIntoView({ behavior: 'smooth', block: 'start' });
   buscarResultados();
 }
@@ -247,8 +307,7 @@ async function submeterBusca(event) {
 async function buscarResultados() {
   const contador = qs('contador-resultados');
   contador.textContent = 'Carregando...';
-  const tbody = qs('tbody-resultados');
-  tbody.innerHTML = '';
+  qs('tbody-resultados').innerHTML = '';
 
   const queryString = montarQueryString(state.filtrosAtivos, {
     limit: PAGINA_TAMANHO,
@@ -297,8 +356,7 @@ function renderizarTabela(items) {
 }
 
 function renderizarErroNaTabela(mensagem) {
-  const tbody = qs('tbody-resultados');
-  tbody.innerHTML = `
+  qs('tbody-resultados').innerHTML = `
     <tr class="linha-vazia">
       <td colspan="6">${escapeHtml(mensagem)}</td>
     </tr>
@@ -317,10 +375,9 @@ function atualizarContador(resposta) {
 }
 
 function atualizarPaginacao(resposta) {
-  const anterior = qs('btn-anterior');
-  const proxima = qs('btn-proxima');
-  anterior.disabled = resposta.offset === 0;
-  proxima.disabled = resposta.offset + resposta.items.length >= resposta.total;
+  qs('btn-anterior').disabled = resposta.offset === 0;
+  qs('btn-proxima').disabled =
+    resposta.offset + resposta.items.length >= resposta.total;
 }
 
 function paginaAnterior() {
@@ -354,7 +411,7 @@ function limparFiltros() {
 }
 
 // -------------------------------------------------------------------------
-// Gráfico (Chart.js)
+// Gráfico
 // -------------------------------------------------------------------------
 
 function renderizarGrafico(items) {
@@ -377,7 +434,7 @@ function renderizarGrafico(items) {
       });
     }
   }
-  const anos = Array.from(porAno.keys()).sort((a, b) => a - b);
+  const anos = [...porAno.keys()].sort((a, b) => a - b);
   if (anos.length < 3) {
     destruirGrafico();
     return;
@@ -396,7 +453,6 @@ function renderizarGrafico(items) {
     return;
   }
   if (typeof Chart === 'undefined') {
-    // CDN indisponível; esconde o bloco silenciosamente.
     wrapper.hidden = true;
     return;
   }
@@ -418,12 +474,8 @@ function renderizarGrafico(items) {
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: true, position: 'bottom' },
-      },
-      scales: {
-        y: { beginAtZero: true },
-      },
+      plugins: { legend: { display: true, position: 'bottom' } },
+      scales: { y: { beginAtZero: true } },
     },
   });
 }
@@ -451,7 +503,7 @@ function popularSelectUf() {
 }
 
 function registrarEventos() {
-  qs('form-execucao').addEventListener('submit', criarExecucao);
+  qs('form-criar-execucoes').addEventListener('submit', criarExecucoes);
   qs('form-filtros').addEventListener('submit', submeterBusca);
   qs('btn-limpar').addEventListener('click', limparFiltros);
   qs('btn-anterior').addEventListener('click', paginaAnterior);
