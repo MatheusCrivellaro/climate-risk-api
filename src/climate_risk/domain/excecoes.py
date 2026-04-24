@@ -219,7 +219,6 @@ class ErroValidacao(ErroDominio):
         super().__init__(mensagem)
 
 
-
 class ErroGradeDesconhecida(ErroDominio):
     """DataArray sem coordenadas ``lat``/``lon`` identificáveis.
 
@@ -236,6 +235,7 @@ class ErroGradeDesconhecida(ErroDominio):
 
     def __init__(self, mensagem: str) -> None:
         super().__init__(mensagem)
+
 
 class ErroShapefileMunicipiosIndisponivel(ErroDominio):
     """Shapefile de municípios configurado mas inacessível.
