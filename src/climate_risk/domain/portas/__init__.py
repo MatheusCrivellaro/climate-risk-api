@@ -6,6 +6,9 @@ As portas são contratos que a camada ``application`` usa e a camada
 
 from climate_risk.domain.portas.fila_jobs import FilaJobs
 from climate_risk.domain.portas.leitor_netcdf import LeitorNetCDF
+from climate_risk.domain.portas.repositorio_resultado_estresse_hidrico import (
+    RepositorioResultadoEstresseHidrico,
+)
 from climate_risk.domain.portas.repositorios import (
     RepositorioExecucoes,
     RepositorioFornecedores,
@@ -26,6 +29,7 @@ __all__ = [
     "RepositorioFornecedores",
     "RepositorioJobs",
     "RepositorioMunicipios",
+    "RepositorioResultadoEstresseHidrico",
     "RepositorioResultados",
     "ShapefileMunicipios",
 ]

@@ -42,3 +42,21 @@ export function StatusBadge({ status }: { status: string }) {
   const tone = STATUS_TONE[status] ?? 'slate';
   return <Badge tone={tone}>{status}</Badge>;
 }
+
+const TIPO_EXECUCAO_TONE: Record<string, BadgeTone> = {
+  grade_bbox: 'blue',
+  pontos: 'blue',
+  estresse_hidrico: 'amber',
+};
+
+const TIPO_EXECUCAO_LABEL: Record<string, string> = {
+  grade_bbox: 'precipitação extrema',
+  pontos: 'pontos',
+  estresse_hidrico: 'estresse hídrico',
+};
+
+export function TipoExecucaoBadge({ tipo }: { tipo: string }) {
+  const tone = TIPO_EXECUCAO_TONE[tipo] ?? 'slate';
+  const label = TIPO_EXECUCAO_LABEL[tipo] ?? tipo;
+  return <Badge tone={tone}>{label}</Badge>;
+}

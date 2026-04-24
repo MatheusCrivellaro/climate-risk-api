@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { StatusBadge } from '@/components/Badge';
+import { StatusBadge, TipoExecucaoBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { CodeBlock } from '@/components/CodeBlock';
@@ -42,7 +42,13 @@ export default function ExecucaoDetalhePage() {
               ) : null}
               <Button
                 variant="secondary"
-                onClick={() => navigate(`/resultados?execucao_id=${execucao.data!.id}`)}
+                onClick={() => {
+                  const rota =
+                    execucao.data!.tipo === 'estresse_hidrico'
+                      ? `/resultados/estresse-hidrico?execucao_id=${execucao.data!.id}`
+                      : `/resultados?execucao_id=${execucao.data!.id}`;
+                  navigate(rota);
+                }}
               >
                 Ver resultados
               </Button>
@@ -65,7 +71,9 @@ export default function ExecucaoDetalhePage() {
               <dt className="text-slate-500">Variável</dt>
               <dd>{execucao.data.variavel}</dd>
               <dt className="text-slate-500">Tipo</dt>
-              <dd>{execucao.data.tipo}</dd>
+              <dd>
+                <TipoExecucaoBadge tipo={execucao.data.tipo} />
+              </dd>
               <dt className="text-slate-500">Arquivo</dt>
               <dd className="break-all font-mono text-xs">{execucao.data.arquivo_origem}</dd>
               <dt className="text-slate-500">Status</dt>

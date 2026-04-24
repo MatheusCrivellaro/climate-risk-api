@@ -6,6 +6,9 @@ from climate_risk.domain.entidades.fornecedor import Fornecedor
 from climate_risk.domain.entidades.job import Job, StatusJob
 from climate_risk.domain.entidades.municipio import Municipio
 from climate_risk.domain.entidades.resultado import ResultadoIndice
+from climate_risk.domain.entidades.resultado_estresse_hidrico import (
+    ResultadoEstresseHidrico,
+)
 
 __all__ = [
     "DadosClimaticos",
@@ -13,6 +16,7 @@ __all__ = [
     "Fornecedor",
     "Job",
     "Municipio",
+    "ResultadoEstresseHidrico",
     "ResultadoIndice",
     "StatusExecucao",
     "StatusJob",
