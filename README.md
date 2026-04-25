@@ -83,12 +83,18 @@ Requer build: `cd frontend && pnpm install && pnpm build`.
 
 ### `/estudo/` — Interface simplificada (HTML puro)
 
-Página única focada **exclusivamente** no pipeline de estresse hídrico:
-formulário para criar execução + consulta de resultados com filtros e
-gráfico opcional. HTML + CSS + JS vanilla, sem build step.
+Página única focada **exclusivamente** no pipeline de estresse hídrico,
+operando no modo **lote**: aceita 6 pastas (3 variáveis × 2 cenários) num
+único formulário e cria duas execuções (`rcp45` + `rcp85`) por submit.
+Consome o endpoint `POST /api/execucoes/estresse-hidrico/em-lote` (Slice 17),
+que aceita pastas em vez de arquivos individuais — todos os `.nc` de cada
+pasta são concatenados temporalmente pelo handler.
 
-Ideal para demos, testes rápidos e uso sem instalar Node. Não requer
-build — funciona assim que o backend subir.
+O endpoint antigo `POST /api/execucoes/estresse-hidrico` (arquivo único)
+continua existindo para uso programático.
+
+HTML + CSS + JS vanilla, sem build step. Ideal para demos, testes rápidos
+e uso sem instalar Node — funciona assim que o backend subir.
 
 Acesso: `http://localhost:8000/estudo/`.
 

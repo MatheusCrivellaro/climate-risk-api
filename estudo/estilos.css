@@ -135,6 +135,94 @@ select:focus {
   color: var(--cor-texto-secundario);
 }
 
+.cenarios-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.cenario-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  padding: 16px;
+  background-color: var(--cor-fundo);
+}
+
+.cenario-card legend {
+  padding: 0 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.cenario-rcp45 {
+  border-color: rgba(3, 105, 161, 0.45);
+  background-color: rgba(3, 105, 161, 0.05);
+}
+
+.cenario-rcp45 legend {
+  color: var(--cor-primaria-escura);
+}
+
+.cenario-rcp85 {
+  border-color: rgba(217, 119, 6, 0.45);
+  background-color: rgba(217, 119, 6, 0.06);
+}
+
+.cenario-rcp85 legend {
+  color: var(--cor-warning);
+}
+
+.execucoes-em-lote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.execucao-em-lote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--raio-pequeno);
+  background-color: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--cor-borda);
+  font-size: 0.88rem;
+}
+
+.execucao-em-lote.execucao-erro {
+  background-color: var(--cor-danger-fraca);
+  border-color: rgba(220, 38, 38, 0.35);
+  color: var(--cor-danger);
+}
+
+.execucao-rotulo {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: var(--cor-card);
+  border: 1px solid var(--cor-borda);
+}
+
+.execucao-rotulo.rotulo-rcp45 {
+  color: var(--cor-primaria-escura);
+  border-color: rgba(3, 105, 161, 0.35);
+  background-color: rgba(3, 105, 161, 0.08);
+}
+
+.execucao-rotulo.rotulo-rcp85 {
+  color: var(--cor-warning);
+  border-color: rgba(217, 119, 6, 0.4);
+  background-color: rgba(217, 119, 6, 0.1);
+}
+
 .avancado {
   border: 1px solid var(--cor-borda);
   border-radius: var(--raio-pequeno);
@@ -399,6 +487,10 @@ tbody tr:last-child td {
   }
 
   .avancado-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cenarios-grid {
     grid-template-columns: 1fr;
   }
 

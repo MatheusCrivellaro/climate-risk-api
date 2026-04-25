@@ -27,6 +27,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -35,6 +36,7 @@ from climate_risk.domain.excecoes import (
     ErroArquivoNCNaoEncontrado,
     ErroCenarioInconsistente,
     ErroLeituraNetCDF,
+    ErroPastaVazia,
     ErroVariavelAusente,
 )
 
@@ -309,3 +311,148 @@ class LeitorCordexMultiVariavel:
         if len(valores) == 1:
             return next(iter(valores))
         raise ErroCenarioInconsistente(cenarios_por_caminho)
+
+    def abrir_de_pastas(
+        self,
+        pasta_pr: Path,
+        pasta_tas: Path,
+        pasta_evap: Path,
+        cenario_esperado: str,
+    ) -> DadosClimaticosMultiVariaveis:
+        """Lê todos os ``.nc`` de cada pasta, concatena no tempo, valida cenário.
+
+        Cada pasta deve conter um ou mais arquivos NetCDF da mesma variável
+        e mesmo cenário; os arquivos são concatenados ao longo do eixo
+        temporal e ordenados. Timestamps duplicados (caso haja sobreposição
+        entre arquivos) são deduplicados mantendo o primeiro.
+
+        Args:
+            pasta_pr: Diretório com os arquivos de precipitação.
+            pasta_tas: Diretório com os arquivos de temperatura.
+            pasta_evap: Diretório com os arquivos de evaporação.
+            cenario_esperado: Cenário CORDEX (``"rcp45"``/``"rcp85"``/etc.)
+                que cada arquivo deve reportar — divergência levanta
+                :class:`ErroCenarioInconsistente`.
+
+        Raises:
+            ErroPastaVazia: alguma pasta não tem arquivos ``.nc``.
+            ErroCenarioInconsistente: algum arquivo reporta cenário
+                diferente de ``cenario_esperado``.
+            ErroLeituraNetCDF: interseção temporal entre as três variáveis
+                concatenadas é vazia.
+        """
+        rotulados: tuple[tuple[str, Path, str], ...] = (
+            ("precipitacao", pasta_pr, "pr"),
+            ("temperatura", pasta_tas, "tas"),
+            ("evaporacao", pasta_evap, "evspsbl"),
+        )
+
+        cenario_alvo = cenario_esperado.strip().lower()
+        datasets_para_fechar: list[xr.Dataset] = []
+        try:
+            da_por_rotulo: dict[str, xr.DataArray] = {}
+            for rotulo, pasta, esperada in rotulados:
+                arquivos = sorted(pasta.glob("*.nc"))
+                if not arquivos:
+                    raise ErroPastaVazia(caminho=str(pasta), rotulo=rotulo)
+                da_concat = self._abrir_e_concatenar_pasta(
+                    arquivos=arquivos,
+                    esperada=esperada,
+                    cenario_alvo=cenario_alvo,
+                    datasets_para_fechar=datasets_para_fechar,
+                )
+                da_por_rotulo[esperada] = da_concat
+
+            da_pr = da_por_rotulo["pr"]
+            da_tas = da_por_rotulo["tas"]
+            da_evap = da_por_rotulo["evspsbl"]
+
+            tempo_comum = self._intersectar_tempo(da_pr, da_tas, da_evap)
+            if len(tempo_comum) == 0:
+                raise ErroLeituraNetCDF(
+                    caminho=str(pasta_pr),
+                    detalhe=(
+                        "interseção temporal vazia entre as pastas "
+                        f"pr=[{_resumo_tempo(da_pr)}], "
+                        f"tas=[{_resumo_tempo(da_tas)}], "
+                        f"evap=[{_resumo_tempo(da_evap)}]."
+                    ),
+                )
+
+            da_pr = da_pr.sel(time=tempo_comum).load()
+            da_tas = da_tas.sel(time=tempo_comum).load()
+            da_evap = da_evap.sel(time=tempo_comum).load()
+
+            entidade = DadosClimaticosMultiVariaveis(
+                precipitacao_diaria_mm=da_pr,
+                temperatura_diaria_c=da_tas,
+                evaporacao_diaria_mm=da_evap,
+                tempo=tempo_comum,
+                cenario=cenario_alvo,
+            )
+            entidade.validar()
+            return entidade
+        finally:
+            for ds in datasets_para_fechar:
+                with contextlib.suppress(Exception):
+                    ds.close()
+
+    def _abrir_e_concatenar_pasta(
+        self,
+        *,
+        arquivos: list[Path],
+        esperada: str,
+        cenario_alvo: str,
+        datasets_para_fechar: list[xr.Dataset],
+    ) -> xr.DataArray:
+        """Abre e concatena temporalmente todos os ``.nc`` de uma pasta.
+
+        Para cada arquivo: valida o cenário (atributo ``experiment_id`` ou
+        regex no nome), extrai e padroniza a variável principal. Concatena
+        os ``DataArray`` resultantes no eixo ``time``, ordena por tempo e
+        deduplica timestamps repetidos (mantendo o primeiro).
+        """
+        arrays: list[xr.DataArray] = []
+        cenarios_por_caminho: dict[str, str] = {}
+        for arquivo in arquivos:
+            ds = self._abrir_dataset(arquivo)
+            datasets_para_fechar.append(ds)
+            cenario_arquivo = _inferir_cenario_arquivo(str(arquivo), ds)
+            cenarios_por_caminho[str(arquivo)] = cenario_arquivo
+            if cenario_arquivo != "unknown" and cenario_arquivo != cenario_alvo:
+                raise ErroCenarioInconsistente(
+                    {
+                        str(arquivo): cenario_arquivo,
+                        "<esperado>": cenario_alvo,
+                    }
+                )
+            da = self._extrair_e_padronizar(ds, arquivo, esperada=esperada)
+            arrays.append(da)
+
+        concatenado = arrays[0] if len(arrays) == 1 else xr.concat(arrays, dim="time", join="outer")
+
+        tempo = pd.DatetimeIndex(concatenado["time"].values)
+        ordem = tempo.argsort()
+        concatenado = concatenado.isel(time=ordem)
+        tempo_ordenado = pd.DatetimeIndex(concatenado["time"].values)
+
+        duplicados_mask = tempo_ordenado.duplicated(keep="first")
+        if bool(duplicados_mask.any()):
+            n_dup = int(duplicados_mask.sum())
+            logger.warning(
+                "Timestamps duplicados na pasta de '%s' (%d ocorrências); mantendo a primeira.",
+                esperada,
+                n_dup,
+            )
+            mantidos = ~duplicados_mask
+            concatenado = concatenado.isel(time=np.flatnonzero(mantidos))
+
+        return concatenado
+
+
+def _resumo_tempo(da: xr.DataArray) -> str:
+    """Devolve ``'min..max (n)'`` para diagnóstico de interseções vazias."""
+    tempo = pd.DatetimeIndex(da["time"].values)
+    if len(tempo) == 0:
+        return "vazio"
+    return f"{tempo[0].date()}..{tempo[-1].date()} (n={len(tempo)})"

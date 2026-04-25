@@ -16,12 +16,14 @@ const UFS = [
 ];
 
 const state = {
-  execucaoAtual: null,
+  // Slice 17: até dois itens (rcp45 + rcp85), cada um com {cenario, id, jobId, status, erro}
+  execucoesEmLote: [],
   pollingTimer: null,
   paginaAtual: 0,
   totalResultados: 0,
   filtrosAtivos: {},
   grafico: null,
+  scrollFeito: false,
 };
 
 // -------------------------------------------------------------------------
@@ -75,6 +77,17 @@ async function chamarApi(path, options = {}) {
 // Seção 1: criar execução + polling
 // -------------------------------------------------------------------------
 
+function lerPastasDoForm(form, cenario) {
+  // Slice 17: limpeza obrigatória — remove aspas envolventes ("Copiar como
+  // caminho" do Windows) antes de enviar.
+  const limpar = (valor) => valor.trim().replace(/^"+|"+$/g, '');
+  return {
+    pasta_pr: limpar(form.elements[`${cenario}-pasta-pr`].value),
+    pasta_tas: limpar(form.elements[`${cenario}-pasta-tas`].value),
+    pasta_evap: limpar(form.elements[`${cenario}-pasta-evap`].value),
+  };
+}
+
 async function criarExecucao(event) {
   event.preventDefault();
   pararPolling();
@@ -84,44 +97,52 @@ async function criarExecucao(event) {
   feedback.textContent = '';
 
   const form = event.currentTarget;
+  const rcp45 = lerPastasDoForm(form, 'rcp45');
+  const rcp85 = lerPastasDoForm(form, 'rcp85');
+
+  const todas = [
+    rcp45.pasta_pr, rcp45.pasta_tas, rcp45.pasta_evap,
+    rcp85.pasta_pr, rcp85.pasta_tas, rcp85.pasta_evap,
+  ];
+  if (todas.some((v) => !v)) {
+    mostrarFeedbackErro('Informe as 6 pastas (3 variáveis × 2 cenários).');
+    return;
+  }
+
   const dados = {
-    arquivo_pr: form.arquivo_pr.value.trim(),
-    arquivo_tas: form.arquivo_tas.value.trim(),
-    arquivo_evap: form.arquivo_evap.value.trim(),
-    cenario: form.cenario.value,
+    rcp45,
+    rcp85,
     parametros: {
       limiar_pr_mm_dia: Number(form.limiar_pr_mm_dia.value),
       limiar_tas_c: Number(form.limiar_tas_c.value),
     },
   };
 
-  if (!dados.arquivo_pr || !dados.arquivo_tas || !dados.arquivo_evap) {
-    mostrarFeedbackErro('Informe os três caminhos de arquivo.');
-    return;
-  }
-
   const botao = qs('btn-criar');
   botao.disabled = true;
   botao.textContent = 'Criando...';
 
   try {
-    const resposta = await chamarApi('/execucoes/estresse-hidrico', {
+    const resposta = await chamarApi('/execucoes/estresse-hidrico/em-lote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
     });
-    state.execucaoAtual = {
-      id: resposta.execucao_id,
-      jobId: resposta.job_id,
-      status: resposta.status,
-    };
+    state.execucoesEmLote = (resposta.execucoes || []).map((item) => ({
+      cenario: item.cenario,
+      id: item.execucao_id || null,
+      jobId: item.job_id || null,
+      status: item.status || (item.erro ? 'failed' : 'pending'),
+      erro: item.erro || null,
+    }));
+    state.scrollFeito = false;
     renderizarFeedbackExecucao();
-    iniciarPolling(resposta.execucao_id);
+    iniciarPolling();
   } catch (erro) {
-    mostrarFeedbackErro(erro.message || 'Falha ao criar execução.');
+    mostrarFeedbackErro(erro.message || 'Falha ao criar execuções.');
   } finally {
     botao.disabled = false;
-    botao.textContent = 'Criar execução';
+    botao.textContent = 'Criar execuções';
   }
 }
 
@@ -133,32 +154,42 @@ function mostrarFeedbackErro(mensagem) {
 
 function renderizarFeedbackExecucao() {
   const feedback = qs('feedback-criar');
-  const exec = state.execucaoAtual;
-  if (!exec) {
+  if (state.execucoesEmLote.length === 0) {
     feedback.className = 'feedback';
     feedback.textContent = '';
     return;
   }
   feedback.className = 'feedback feedback-info';
-  feedback.innerHTML = `
-    <span>Execução: <code>${escapeHtml(exec.id)}</code></span>
-    <span class="status-badge status-${escapeHtml(exec.status)}">${escapeHtml(exec.status)}</span>
-    <button type="button" id="btn-ver-resultados" class="btn btn-sucesso">
-      Ver resultados
-    </button>
-  `;
-  const botaoVer = qs('btn-ver-resultados');
-  if (botaoVer) {
-    botaoVer.addEventListener('click', () => irParaResultadosDaExecucao(exec.id));
-  }
+  const linhas = state.execucoesEmLote.map((exec) => {
+    const rotulo = `<span class="execucao-rotulo rotulo-${escapeHtml(exec.cenario)}">${escapeHtml(exec.cenario)}</span>`;
+    if (exec.erro) {
+      return `
+        <div class="execucao-em-lote execucao-erro">
+          ${rotulo}
+          <span>Falha: ${escapeHtml(exec.erro)}</span>
+        </div>
+      `;
+    }
+    const idCurto = exec.id ? `<code>${escapeHtml(exec.id)}</code>` : '';
+    const status = exec.status || 'pending';
+    return `
+      <div class="execucao-em-lote">
+        ${rotulo}
+        ${idCurto}
+        <span class="status-badge status-${escapeHtml(status)}">${escapeHtml(status)}</span>
+      </div>
+    `;
+  });
+  feedback.innerHTML = `<div class="execucoes-em-lote">${linhas.join('')}</div>`;
 }
 
-function iniciarPolling(execucaoId) {
+function iniciarPolling() {
   pararPolling();
-  state.pollingTimer = setInterval(
-    () => atualizarStatusExecucao(execucaoId),
-    POLLING_INTERVAL_MS,
-  );
+  if (todasFinalizadas()) {
+    talvezScrollarParaResultados();
+    return;
+  }
+  state.pollingTimer = setInterval(atualizarStatusExecucoes, POLLING_INTERVAL_MS);
 }
 
 function pararPolling() {
@@ -168,39 +199,46 @@ function pararPolling() {
   }
 }
 
-async function atualizarStatusExecucao(execucaoId) {
-  try {
-    const resposta = await chamarApi(
-      `/execucoes/${encodeURIComponent(execucaoId)}`,
-    );
-    if (!state.execucaoAtual || state.execucaoAtual.id !== execucaoId) {
-      pararPolling();
-      return;
-    }
-    state.execucaoAtual.status = resposta.status;
-    renderizarFeedbackExecucao();
-    if (STATUSES_FINAIS.has(resposta.status)) {
-      pararPolling();
-      if (resposta.status === 'completed') {
-        irParaResultadosDaExecucao(execucaoId);
-      }
-    }
-  } catch (erro) {
+function todasFinalizadas() {
+  if (state.execucoesEmLote.length === 0) return false;
+  return state.execucoesEmLote.every(
+    (exec) => exec.erro || STATUSES_FINAIS.has(exec.status),
+  );
+}
+
+async function atualizarStatusExecucoes() {
+  const pendentes = state.execucoesEmLote.filter(
+    (exec) => exec.id && !exec.erro && !STATUSES_FINAIS.has(exec.status),
+  );
+  if (pendentes.length === 0) {
     pararPolling();
-    mostrarFeedbackErro(
-      `Falha ao consultar status da execução: ${erro.message || erro}`,
-    );
+    talvezScrollarParaResultados();
+    return;
+  }
+  await Promise.all(pendentes.map((exec) => atualizarStatusUmaExecucao(exec)));
+  renderizarFeedbackExecucao();
+  if (todasFinalizadas()) {
+    pararPolling();
+    talvezScrollarParaResultados();
   }
 }
 
-function irParaResultadosDaExecucao(execucaoId) {
-  qs('filtro-execucao').value = execucaoId;
-  qs('filtro-cenario').value = '';
-  qs('filtro-ano-min').value = '';
-  qs('filtro-ano-max').value = '';
-  qs('filtro-uf').value = '';
+async function atualizarStatusUmaExecucao(exec) {
+  try {
+    const resposta = await chamarApi(
+      `/execucoes/${encodeURIComponent(exec.id)}`,
+    );
+    exec.status = resposta.status;
+  } catch (erro) {
+    exec.erro = erro.message || String(erro);
+    exec.status = 'failed';
+  }
+}
+
+function talvezScrollarParaResultados() {
+  if (state.scrollFeito) return;
+  state.scrollFeito = true;
   qs('resultados-titulo').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  buscarResultados();
 }
 
 // -------------------------------------------------------------------------

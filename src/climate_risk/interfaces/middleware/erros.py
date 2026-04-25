@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, Response
 from climate_risk.core.logging import correlation_id_ctx
 from climate_risk.domain.excecoes import (
     ErroArquivoNCNaoEncontrado,
+    ErroCenarioInconsistente,
     ErroClienteIBGE,
     ErroConfiguracao,
     ErroConflito,
@@ -24,6 +25,7 @@ from climate_risk.domain.excecoes import (
     ErroJobNaoEncontrado,
     ErroLeituraNetCDF,
     ErroLimitePontosSincrono,
+    ErroPastaVazia,
     ErroValidacao,
     ErroVariavelAusente,
 )
@@ -57,6 +59,14 @@ _MAPEAMENTO: tuple[tuple[type[Exception], _MapaErro], ...] = (
     (
         ErroArquivoNCNaoEncontrado,
         _MapaErro(404, "Arquivo NetCDF não encontrado", "arquivo-nc-nao-encontrado"),
+    ),
+    (
+        ErroPastaVazia,
+        _MapaErro(422, "Pasta sem arquivos NetCDF", "pasta-vazia"),
+    ),
+    (
+        ErroCenarioInconsistente,
+        _MapaErro(422, "Cenário inconsistente entre arquivos", "cenario-inconsistente"),
     ),
     (
         ErroVariavelAusente,

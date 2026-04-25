@@ -64,3 +64,31 @@ class LeitorMultiVariavel(Protocol):
                 diferentes.
         """
         ...
+
+    def abrir_de_pastas(
+        self,
+        pasta_pr: Path,
+        pasta_tas: Path,
+        pasta_evap: Path,
+        cenario_esperado: str,
+    ) -> DadosClimaticosMultiVariaveis:
+        """Lê todos os ``.nc`` de cada pasta e concatena temporalmente.
+
+        Slice 17 — variante usada pelo modo "lote" da página ``/estudo/``.
+        Cada pasta deve conter um ou mais arquivos da mesma variável e
+        cenário; os arquivos são concatenados ao longo do eixo ``time``.
+
+        Args:
+            pasta_pr: diretório com os ``.nc`` de precipitação.
+            pasta_tas: diretório com os ``.nc`` de temperatura.
+            pasta_evap: diretório com os ``.nc`` de evaporação.
+            cenario_esperado: rótulo CORDEX que cada arquivo deve reportar.
+
+        Raises:
+            ErroPastaVazia: alguma pasta não tem arquivos ``.nc``.
+            ErroCenarioInconsistente: algum arquivo reporta cenário
+                diferente de ``cenario_esperado``.
+            ErroLeituraNetCDF: interseção temporal entre as três variáveis
+                concatenadas é vazia.
+        """
+        ...

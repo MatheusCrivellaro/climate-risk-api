@@ -26,55 +26,88 @@
         aria-labelledby="criar-titulo"
         aria-describedby="criar-descricao"
       >
-        <h2 id="criar-titulo">Criar nova execução de estresse hídrico</h2>
+        <h2 id="criar-titulo">Criar execuções de estresse hídrico (lote)</h2>
         <p id="criar-descricao" class="muted">
-          Informe os três arquivos NetCDF (precipitação, temperatura do ar e
-          evaporação) acessíveis pelo servidor e o cenário CORDEX.
+          Informe as pastas com os arquivos NetCDF (precipitação, temperatura
+          do ar e evaporação) para os dois cenários CORDEX. Um clique cria
+          duas execuções — rcp45 e rcp85.
         </p>
 
         <form id="form-execucao" novalidate>
-          <div class="campo">
-            <label for="arquivo_pr">Arquivo de precipitação (pr)</label>
-            <input
-              type="text"
-              id="arquivo_pr"
-              name="arquivo_pr"
-              placeholder="/dados/cordex/rcp45/pr_day_BR_2026-2035.nc"
-              required
-              autocomplete="off"
-            />
-          </div>
+          <div class="cenarios-grid">
+            <fieldset class="cenario-card cenario-rcp45">
+              <legend>Cenário rcp45</legend>
+              <div class="campo">
+                <label for="rcp45-pasta-pr">Pasta de precipitação (pr)</label>
+                <input
+                  type="text"
+                  id="rcp45-pasta-pr"
+                  name="rcp45-pasta-pr"
+                  placeholder="/dados/cordex/rcp45/pr"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp45-pasta-tas">Pasta de temperatura (tas)</label>
+                <input
+                  type="text"
+                  id="rcp45-pasta-tas"
+                  name="rcp45-pasta-tas"
+                  placeholder="/dados/cordex/rcp45/tas"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp45-pasta-evap">Pasta de evaporação (evspsbl)</label>
+                <input
+                  type="text"
+                  id="rcp45-pasta-evap"
+                  name="rcp45-pasta-evap"
+                  placeholder="/dados/cordex/rcp45/evap"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+            </fieldset>
 
-          <div class="campo">
-            <label for="arquivo_tas">Arquivo de temperatura (tas)</label>
-            <input
-              type="text"
-              id="arquivo_tas"
-              name="arquivo_tas"
-              placeholder="/dados/cordex/rcp45/tas_day_BR_2026-2035.nc"
-              required
-              autocomplete="off"
-            />
-          </div>
-
-          <div class="campo">
-            <label for="arquivo_evap">Arquivo de evaporação (evspsbl)</label>
-            <input
-              type="text"
-              id="arquivo_evap"
-              name="arquivo_evap"
-              placeholder="/dados/cordex/rcp45/evspsbl_day_BR_2026-2035.nc"
-              required
-              autocomplete="off"
-            />
-          </div>
-
-          <div class="campo">
-            <label for="cenario">Cenário CORDEX</label>
-            <select id="cenario" name="cenario">
-              <option value="rcp45">rcp45</option>
-              <option value="rcp85">rcp85</option>
-            </select>
+            <fieldset class="cenario-card cenario-rcp85">
+              <legend>Cenário rcp85</legend>
+              <div class="campo">
+                <label for="rcp85-pasta-pr">Pasta de precipitação (pr)</label>
+                <input
+                  type="text"
+                  id="rcp85-pasta-pr"
+                  name="rcp85-pasta-pr"
+                  placeholder="/dados/cordex/rcp85/pr"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp85-pasta-tas">Pasta de temperatura (tas)</label>
+                <input
+                  type="text"
+                  id="rcp85-pasta-tas"
+                  name="rcp85-pasta-tas"
+                  placeholder="/dados/cordex/rcp85/tas"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+              <div class="campo">
+                <label for="rcp85-pasta-evap">Pasta de evaporação (evspsbl)</label>
+                <input
+                  type="text"
+                  id="rcp85-pasta-evap"
+                  name="rcp85-pasta-evap"
+                  placeholder="/dados/cordex/rcp85/evap"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+            </fieldset>
           </div>
 
           <details class="avancado">
@@ -108,7 +141,7 @@
 
           <div class="acoes">
             <button type="submit" id="btn-criar" class="btn btn-primario">
-              Criar execução
+              Criar execuções
             </button>
           </div>
 
