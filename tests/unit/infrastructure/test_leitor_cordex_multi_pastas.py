@@ -189,6 +189,91 @@ def test_intersecao_temporal_vazia_levanta_erro(tmp_path: Path) -> None:
     assert "interseção temporal vazia" in str(info.value)
 
 
+def test_abrir_de_pastas_retorna_dataarray_lazy(tmp_path: Path) -> None:
+    """Confirma que os ``DataArray`` retornados estão em chunks dask (lazy).
+
+    A garantia de laziness evita estouro de memória quando o conjunto de
+    arquivos por variável passa de alguns GB. A materialização real só pode
+    acontecer dentro do agregador, município a município.
+    """
+    pasta_pr, pasta_tas, pasta_evap = _criar_pastas_validas(tmp_path)
+
+    dados = LeitorCordexMultiVariavel().abrir_de_pastas(
+        pasta_pr=pasta_pr,
+        pasta_tas=pasta_tas,
+        pasta_evap=pasta_evap,
+        cenario_esperado="rcp45",
+    )
+
+    assert dados.precipitacao_diaria_mm.chunks is not None
+    assert dados.temperatura_diaria_c.chunks is not None
+    assert dados.evaporacao_diaria_mm.chunks is not None
+
+
+@pytest.mark.slow
+def test_abrir_de_pastas_grande_nao_estoura_memoria(tmp_path: Path) -> None:
+    """Cria 5 arquivos sintéticos de ~5 anos cada e mede incremento de RSS.
+
+    Marcado como ``slow`` — não roda no CI normal. Para executar manualmente::
+
+        uv run pytest tests/unit/infrastructure/test_leitor_cordex_multi_pastas.py \\
+            -m slow -k grande_nao_estoura_memoria
+
+    O teste verifica que abrir 5 arquivos por variável (3 variáveis × 5
+    arquivos = 15 arquivos) NÃO materializa todos em RAM. Tolerância: o
+    incremento de RSS após a abertura deve ficar abaixo de 500 MB.
+    """
+    import os
+
+    import psutil  # type: ignore[import-not-found]
+
+    pasta_pr = tmp_path / "pr"
+    pasta_tas = tmp_path / "tas"
+    pasta_evap = tmp_path / "evap"
+    for p in (pasta_pr, pasta_tas, pasta_evap):
+        p.mkdir()
+
+    rng = np.random.default_rng(42)
+    n_lat, n_lon = 80, 80  # ~25k células — proxy de grade real reduzida
+    for ano_inicio in range(2020, 2045, 5):  # 5 arquivos × 5 anos
+        tempo = pd.date_range(f"{ano_inicio}-01-01", periods=5 * 365, freq="D")
+        lat = np.linspace(-30.0, -5.0, n_lat)
+        lon = np.linspace(-65.0, -40.0, n_lon)
+        for pasta, var, unit in (
+            (pasta_pr, "pr", "kg m-2 s-1"),
+            (pasta_tas, "tas", "K"),
+            (pasta_evap, "evspsbl", "kg m-2 s-1"),
+        ):
+            ds_novo = xr.Dataset(
+                data_vars={
+                    var: (
+                        ("time", "lat", "lon"),
+                        rng.random((len(tempo), n_lat, n_lon), dtype=np.float32),
+                        {"units": unit},
+                    ),
+                },
+                coords={"time": tempo, "lat": lat, "lon": lon},
+                attrs={"experiment_id": "rcp45"},
+            )
+            ds_novo.to_netcdf(pasta / f"{var}_{ano_inicio}.nc", engine="netcdf4")
+
+    rss_antes = psutil.Process(os.getpid()).memory_info().rss
+    dados = LeitorCordexMultiVariavel().abrir_de_pastas(
+        pasta_pr=pasta_pr,
+        pasta_tas=pasta_tas,
+        pasta_evap=pasta_evap,
+        cenario_esperado="rcp45",
+    )
+    rss_depois = psutil.Process(os.getpid()).memory_info().rss
+    incremento_mb = (rss_depois - rss_antes) / (1024 * 1024)
+
+    assert dados.precipitacao_diaria_mm.chunks is not None
+    assert incremento_mb < 500, (
+        f"Abertura materializou {incremento_mb:.0f} MB em RSS — "
+        f"esperado < 500 MB (deve permanecer lazy)."
+    )
+
+
 def test_timestamps_duplicados_sao_deduplicados(tmp_path: Path) -> None:
     """Dois arquivos de pr com sobreposição parcial → primeira ocorrência mantida."""
     pasta_pr = tmp_path / "pr"

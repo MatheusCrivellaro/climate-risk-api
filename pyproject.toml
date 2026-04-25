@@ -21,6 +21,7 @@ dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
     "xarray>=2024.6",
+    "dask>=2024.5",
     "netcdf4>=1.7",
     "python-ulid>=3.0",
     "httpx>=0.27",
