@@ -225,7 +225,9 @@ def test_abrir_de_pastas_grande_nao_estoura_memoria(tmp_path: Path) -> None:
     """
     import os
 
-    import psutil  # type: ignore[import-not-found]
+    psutil = pytest.importorskip(
+        "psutil", reason="psutil é necessário para medir RSS — `uv pip install psutil`."
+    )
 
     pasta_pr = tmp_path / "pr"
     pasta_tas = tmp_path / "tas"
