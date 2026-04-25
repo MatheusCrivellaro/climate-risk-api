@@ -219,7 +219,7 @@ def test_abrir_de_pastas_grande_nao_estoura_memoria(tmp_path: Path) -> None:
         uv run pytest tests/unit/infrastructure/test_leitor_cordex_multi_pastas.py \\
             -m slow -k grande_nao_estoura_memoria
 
-    O teste verifica que abrir 5 arquivos por variável (3 variáveis × 5
+    O teste verifica que abrir 5 arquivos por variável (3 variáveis x 5
     arquivos = 15 arquivos) NÃO materializa todos em RAM. Tolerância: o
     incremento de RSS após a abertura deve ficar abaixo de 500 MB.
     """
@@ -237,7 +237,7 @@ def test_abrir_de_pastas_grande_nao_estoura_memoria(tmp_path: Path) -> None:
 
     rng = np.random.default_rng(42)
     n_lat, n_lon = 80, 80  # ~25k células — proxy de grade real reduzida
-    for ano_inicio in range(2020, 2045, 5):  # 5 arquivos × 5 anos
+    for ano_inicio in range(2020, 2045, 5):  # 5 arquivos x 5 anos
         tempo = pd.date_range(f"{ano_inicio}-01-01", periods=5 * 365, freq="D")
         lat = np.linspace(-30.0, -5.0, n_lat)
         lon = np.linspace(-65.0, -40.0, n_lon)

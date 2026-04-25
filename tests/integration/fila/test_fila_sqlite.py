@@ -262,9 +262,7 @@ async def test_concluir_com_falha_apos_handler_quebrado(
             await sessao_worker.execute(text("SELECT * FROM tabela_inexistente"))
 
         # Deve concluir sem propagar exceção, mesmo com sessão suja.
-        await fila.concluir_com_falha(
-            adquirido.id, erro="boom", proxima_tentativa_em=None
-        )
+        await fila.concluir_com_falha(adquirido.id, erro="boom", proxima_tentativa_em=None)
 
     async with fila_sessionmaker() as sessao_check:
         orm = await sessao_check.get(JobORM, adquirido.id)

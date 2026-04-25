@@ -435,9 +435,7 @@ class LeitorCordexMultiVariavel:
                     parallel=False,
                 )
         except FileNotFoundError as erro:
-            raise ErroArquivoNCNaoEncontrado(
-                caminho=str(arquivos[0]), detalhe=str(erro)
-            ) from erro
+            raise ErroArquivoNCNaoEncontrado(caminho=str(arquivos[0]), detalhe=str(erro)) from erro
         except Exception as erro:
             raise ErroLeituraNetCDF(caminho=str(arquivos[0]), detalhe=str(erro)) from erro
 

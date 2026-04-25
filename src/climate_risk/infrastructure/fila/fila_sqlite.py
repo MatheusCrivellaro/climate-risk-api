@@ -193,8 +193,7 @@ class FilaSQLite:
         async def _executar(sessao: AsyncSession) -> None:
             tentativas_atuais = await self._consultar_tentativas(sessao, job_id)
             forcar_falha_terminal = (
-                proxima_tentativa_em is not None
-                and tentativas_atuais + 1 >= MAX_TENTATIVAS
+                proxima_tentativa_em is not None and tentativas_atuais + 1 >= MAX_TENTATIVAS
             )
 
             if proxima_tentativa_em is None or forcar_falha_terminal:
@@ -322,6 +321,7 @@ class FilaSQLite:
         """
         agora_iso = datetime_para_iso(utc_now())
         limite_iso = datetime_para_iso(utc_now() - timedelta(seconds=timeout_segundos))
+        assert agora_iso is not None and limite_iso is not None
 
         if self._sessionmaker is not None:
             async with self._sessionmaker() as sessao:
