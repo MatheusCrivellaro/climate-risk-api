@@ -18,10 +18,12 @@ from climate_risk.application.indices.calcular_estresse_hidrico import (
     CalcularIndicesEstresseHidrico,
     ExecucaoIniciada,
     ParametrosCalculoEstresseHidrico,
+    ParametrosCalculoEstresseHidricoPasta,
 )
 from climate_risk.domain.calculos.estresse_hidrico import (
     ParametrosIndicesEstresseHidrico,
 )
+from climate_risk.domain.excecoes import ErroDominio
 from climate_risk.infrastructure.db.repositorios.resultado_estresse_hidrico import (
     SQLAlchemyRepositorioResultadoEstresseHidrico,
 )
@@ -31,8 +33,12 @@ from climate_risk.interfaces.dependencias import (
 )
 from climate_risk.interfaces.schemas.comum import ProblemDetails
 from climate_risk.interfaces.schemas.estresse_hidrico import (
+    CenarioPastasSchema,
     CriarExecucaoEstresseHidricoRequest,
     CriarExecucaoEstresseHidricoResponse,
+    CriarExecucoesEstresseHidricoEmLoteRequest,
+    CriarExecucoesEstresseHidricoEmLoteResponse,
+    ItemExecucaoEmLote,
     ListarResultadosEstresseHidricoResponse,
     ResultadoEstresseHidricoSchema,
 )
@@ -86,6 +92,66 @@ async def criar_execucao_estresse_hidrico(
     )
     resultado = await caso_uso.executar(params)
     return _traduzir_execucao_iniciada(resultado)
+
+
+@router_execucoes.post(
+    "/em-lote",
+    response_model=CriarExecucoesEstresseHidricoEmLoteResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary=(
+        "Cria duas execuções de estresse hídrico (rcp45 + rcp85) a partir de "
+        "pastas de arquivos NetCDF (Slice 17)."
+    ),
+    responses={
+        422: {"model": ProblemDetails, "description": "Erro de validação do corpo."},
+    },
+)
+async def criar_execucoes_estresse_hidrico_em_lote(
+    payload: CriarExecucoesEstresseHidricoEmLoteRequest,
+    caso_uso: CriarDep,
+) -> CriarExecucoesEstresseHidricoEmLoteResponse:
+    parametros_indices = ParametrosIndicesEstresseHidrico(
+        limiar_pr_mm_dia=payload.parametros.limiar_pr_mm_dia,
+        limiar_tas_c=payload.parametros.limiar_tas_c,
+    )
+
+    resultados: list[ItemExecucaoEmLote] = []
+    for cenario, pastas in (("rcp45", payload.rcp45), ("rcp85", payload.rcp85)):
+        item = await _executar_cenario(
+            caso_uso=caso_uso,
+            cenario=cenario,
+            pastas=pastas,
+            parametros_indices=parametros_indices,
+        )
+        resultados.append(item)
+    return CriarExecucoesEstresseHidricoEmLoteResponse(execucoes=resultados)
+
+
+async def _executar_cenario(
+    *,
+    caso_uso: CalcularIndicesEstresseHidrico,
+    cenario: str,
+    pastas: CenarioPastasSchema,
+    parametros_indices: ParametrosIndicesEstresseHidrico,
+) -> ItemExecucaoEmLote:
+    """Tenta criar a execução de um cenário; falha não propaga ao outro."""
+    params = ParametrosCalculoEstresseHidricoPasta(
+        pasta_pr=Path(pastas.pasta_pr),
+        pasta_tas=Path(pastas.pasta_tas),
+        pasta_evap=Path(pastas.pasta_evap),
+        cenario=cenario,
+        parametros_indices=parametros_indices,
+    )
+    try:
+        resultado = await caso_uso.executar_de_pasta(params)
+    except ErroDominio as exc:
+        return ItemExecucaoEmLote(cenario=cenario, erro=str(exc))
+    return ItemExecucaoEmLote(
+        cenario=cenario,
+        execucao_id=resultado.execucao_id,
+        job_id=resultado.job_id,
+        status=resultado.status,
+    )
 
 
 @router_resultados.get(

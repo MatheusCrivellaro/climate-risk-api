@@ -19,6 +19,18 @@ async def test_estudo_index_retorna_html(cliente_api: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_estudo_index_tem_seis_inputs_de_pasta(cliente_api: AsyncClient) -> None:
+    """Slice 17: 3 variaveis x 2 cenarios = 6 inputs de pasta."""
+    resposta = await cliente_api.get("/estudo/")
+    assert resposta.status_code == 200
+    html = resposta.text
+    for cenario in ("rcp45", "rcp85"):
+        for variavel in ("pr", "tas", "evap"):
+            id_esperado = f"{cenario}-pasta-{variavel}"
+            assert f'id="{id_esperado}"' in html, f"input {id_esperado} não encontrado"
+
+
+@pytest.mark.asyncio
 async def test_estudo_serve_estilos_css(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.get("/estudo/estilos.css")
     assert resposta.status_code == 200

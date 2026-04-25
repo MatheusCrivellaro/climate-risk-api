@@ -29,6 +29,12 @@ Motivos da decisão:
 - Consultas agregadas (ex.: médias ponderadas) ficam triviais em wide.
 - Mantém o pipeline de precipitação extrema inalterado.
 
+### Modo lote (Slice 17)
+
+Página `/estudo/` opera no modo "lote": aceita 6 pastas e cria 2 execuções
+por submit. Endpoint antigo `/api/execucoes/estresse-hidrico` continua
+existindo para uso programático com arquivo único.
+
 ## Convenções
 
 - Arquitetura hexagonal com camadas explícitas (ADR-005): `domain`,

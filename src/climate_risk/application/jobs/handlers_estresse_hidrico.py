@@ -42,7 +42,11 @@ from climate_risk.domain.portas.repositorio_resultado_estresse_hidrico import (
 )
 from climate_risk.domain.portas.repositorios import RepositorioExecucoes
 
-__all__ = ["HandlerEstresseHidrico", "criar_handler_estresse_hidrico"]
+__all__ = [
+    "HandlerEstresseHidrico",
+    "criar_handler_estresse_hidrico",
+    "criar_handler_estresse_hidrico_pasta",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,32 @@ def criar_handler_estresse_hidrico(
 
     async def _handler(payload: dict[str, Any]) -> None:
         await _processar(
+            payload,
+            leitor=leitor,
+            agregador=agregador,
+            repositorio_execucoes=repositorio_execucoes,
+            repositorio_resultados=repositorio_resultados,
+        )
+
+    return _handler
+
+
+def criar_handler_estresse_hidrico_pasta(
+    *,
+    leitor: LeitorMultiVariavel,
+    agregador: AgregadorEspacial,
+    repositorio_execucoes: RepositorioExecucoes,
+    repositorio_resultados: RepositorioResultadoEstresseHidrico,
+) -> HandlerEstresseHidrico:
+    """Fábrica do handler ``processar_estresse_hidrico_pasta`` (Slice 17).
+
+    Mesma estrutura do handler de arquivo único, mas chama
+    :meth:`LeitorMultiVariavel.abrir_de_pastas` para concatenar todos os
+    ``.nc`` presentes em cada uma das três pastas antes do pipeline.
+    """
+
+    async def _handler(payload: dict[str, Any]) -> None:
+        await _processar_de_pastas(
             payload,
             leitor=leitor,
             agregador=agregador,
@@ -120,6 +150,58 @@ async def _processar(
     await _transicionar(repositorio_execucoes, execucao, StatusExecucao.COMPLETED, concluido=True)
     logger.info(
         "HandlerEstresseHidrico concluído execucao_id=%s linhas=%d",
+        execucao_id,
+        len(resultados),
+    )
+
+
+async def _processar_de_pastas(
+    payload: dict[str, Any],
+    *,
+    leitor: LeitorMultiVariavel,
+    agregador: AgregadorEspacial,
+    repositorio_execucoes: RepositorioExecucoes,
+    repositorio_resultados: RepositorioResultadoEstresseHidrico,
+) -> None:
+    execucao_id = str(payload["execucao_id"])
+    cenario = str(payload["cenario"])
+    params = ParametrosIndicesEstresseHidrico(
+        limiar_pr_mm_dia=float(payload["limiar_pr_mm_dia"]),
+        limiar_tas_c=float(payload["limiar_tas_c"]),
+    )
+
+    execucao = await _carregar_execucao(repositorio_execucoes, execucao_id)
+    execucao = await _transicionar(
+        repositorio_execucoes, execucao, StatusExecucao.RUNNING, concluido=False
+    )
+
+    try:
+        dados = leitor.abrir_de_pastas(
+            pasta_pr=Path(payload["pasta_pr"]),
+            pasta_tas=Path(payload["pasta_tas"]),
+            pasta_evap=Path(payload["pasta_evap"]),
+            cenario_esperado=cenario,
+        )
+        df_pr = agregador.agregar_por_municipio(dados.precipitacao_diaria_mm, "pr")
+        df_tas = agregador.agregar_por_municipio(dados.temperatura_diaria_c, "tas")
+        df_evap = agregador.agregar_por_municipio(dados.evaporacao_diaria_mm, "evap")
+
+        df_combinado = _combinar_dataframes(df_pr, df_tas, df_evap)
+        resultados = _calcular_resultados_por_municipio(
+            df_combinado,
+            execucao_id=execucao_id,
+            cenario=cenario,
+            params=params,
+        )
+
+        await repositorio_resultados.salvar_lote(resultados)
+    except Exception:
+        await _transicionar(repositorio_execucoes, execucao, StatusExecucao.FAILED, concluido=True)
+        raise
+
+    await _transicionar(repositorio_execucoes, execucao, StatusExecucao.COMPLETED, concluido=True)
+    logger.info(
+        "HandlerEstresseHidricoPasta concluído execucao_id=%s linhas=%d",
         execucao_id,
         len(resultados),
     )

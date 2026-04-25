@@ -72,6 +72,64 @@ class CriarExecucaoEstresseHidricoResponse(BaseModel):
     )
 
 
+class CenarioPastasSchema(BaseModel):
+    """Trio de pastas (pr/tas/evap) de um único cenário no modo lote (Slice 17)."""
+
+    pasta_pr: str = Field(..., min_length=1, description="Diretório com os .nc de precipitação.")
+    pasta_tas: str = Field(..., min_length=1, description="Diretório com os .nc de temperatura.")
+    pasta_evap: str = Field(..., min_length=1, description="Diretório com os .nc de evaporação.")
+
+
+class CriarExecucoesEstresseHidricoEmLoteRequest(BaseModel):
+    """Corpo do ``POST /api/execucoes/estresse-hidrico/em-lote`` (Slice 17).
+
+    Cada cenário é independente: a falha em um não interrompe o outro.
+    """
+
+    rcp45: CenarioPastasSchema
+    rcp85: CenarioPastasSchema
+    parametros: ParametrosIndicesEstresseHidricoSchema = Field(
+        default_factory=lambda: ParametrosIndicesEstresseHidricoSchema(
+            limiar_pr_mm_dia=1.0,
+            limiar_tas_c=30.0,
+        ),
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "rcp45": {
+                    "pasta_pr": "/dados/cordex/rcp45/pr",
+                    "pasta_tas": "/dados/cordex/rcp45/tas",
+                    "pasta_evap": "/dados/cordex/rcp45/evap",
+                },
+                "rcp85": {
+                    "pasta_pr": "/dados/cordex/rcp85/pr",
+                    "pasta_tas": "/dados/cordex/rcp85/tas",
+                    "pasta_evap": "/dados/cordex/rcp85/evap",
+                },
+                "parametros": {"limiar_pr_mm_dia": 1.0, "limiar_tas_c": 30.0},
+            }
+        }
+    }
+
+
+class ItemExecucaoEmLote(BaseModel):
+    """Item da lista devolvida por ``/em-lote`` — um cenário."""
+
+    cenario: str
+    execucao_id: str | None = None
+    job_id: str | None = None
+    status: str | None = None
+    erro: str | None = None
+
+
+class CriarExecucoesEstresseHidricoEmLoteResponse(BaseModel):
+    """Corpo do ``202 Accepted`` do endpoint em lote."""
+
+    execucoes: list[ItemExecucaoEmLote]
+
+
 class ResultadoEstresseHidricoSchema(BaseModel):
     """Item de :class:`ListarResultadosEstresseHidricoResponse`."""
 
