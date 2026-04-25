@@ -180,7 +180,11 @@ async def _rodar_worker() -> None:
 
     try:
         async with sessionmaker() as sessao:
-            fila = FilaSQLite(sessao)
+            # ``sessionmaker`` é passado também para a fila para que os
+            # writes terminais (``concluir_com_falha``, ``recuperar_zumbis``)
+            # rodem em sessões isoladas e não conflitem com a task de
+            # heartbeat. Ver docstring de ``FilaSQLite``.
+            fila = FilaSQLite(sessao, sessionmaker=sessionmaker)
             worker = Worker(
                 fila=fila,
                 handlers=handlers,
