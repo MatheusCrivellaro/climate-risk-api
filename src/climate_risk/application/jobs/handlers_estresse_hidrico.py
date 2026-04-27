@@ -1,4 +1,4 @@
-"""Handler de job do pipeline de estresse hídrico (Slice 15).
+"""Handler de job do pipeline de estresse hídrico (Slice 15 / Slice 21).
 
 Responsabilidade: consome um :class:`Job` ``processar_estresse_hidrico``,
 executa o pipeline completo (ler → agregar → calcular → persistir) e
@@ -8,6 +8,13 @@ Arquitetura: o handler é uma *closure* criada por :func:`criar_handler_estresse
 Todas as dependências (leitor, agregador, repositórios) são injetadas na
 fábrica; o CLI do worker monta o wiring.
 
+A partir da Slice 21 o pipeline é **streaming**: o agregador é consumido
+município a município via :meth:`AgregadorEspacial.iterar_por_municipio`
+e os resultados são persistidos em batches pequenos (``BATCH_SIZE``).
+Idempotência: cada execução começa apagando resultados parciais
+existentes (se houver) — assim retries não esbarram em ``UniqueConstraint``.
+Ver ADR-013.
+
 ADR-005: imports deste módulo restritos a :mod:`stdlib`, :mod:`domain`,
 :mod:`application` e :mod:`pandas`/`numpy`. Zero dependência de
 ``xarray``/``geopandas`` — elas ficam atrás das portas.
@@ -16,13 +23,12 @@ ADR-005: imports deste módulo restritos a :mod:`stdlib`, :mod:`domain`,
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
 
 from climate_risk.core.ids import gerar_id
 from climate_risk.core.tempo import utc_now
@@ -43,6 +49,8 @@ from climate_risk.domain.portas.repositorio_resultado_estresse_hidrico import (
 from climate_risk.domain.portas.repositorios import RepositorioExecucoes
 
 __all__ = [
+    "BATCH_SIZE",
+    "LOG_INTERVALO",
     "HandlerEstresseHidrico",
     "criar_handler_estresse_hidrico",
     "criar_handler_estresse_hidrico_pasta",
@@ -52,6 +60,13 @@ logger = logging.getLogger(__name__)
 
 HandlerEstresseHidrico = Callable[[dict[str, Any]], Awaitable[None]]
 
+# Município por batch de inserção. Mantém o write amplification baixo sem
+# explodir a memória: 100 municípios x ~30 anos = ~3000 linhas por commit.
+BATCH_SIZE = 100
+
+# Frequência (em municípios) dos logs estruturados de progresso.
+LOG_INTERVALO = 100
+
 
 def criar_handler_estresse_hidrico(
     *,
@@ -60,11 +75,7 @@ def criar_handler_estresse_hidrico(
     repositorio_execucoes: RepositorioExecucoes,
     repositorio_resultados: RepositorioResultadoEstresseHidrico,
 ) -> HandlerEstresseHidrico:
-    """Fábrica do handler ``processar_estresse_hidrico``.
-
-    Returns:
-        Coroutine ``(payload) -> None`` pronta para registro no Worker.
-    """
+    """Fábrica do handler ``processar_estresse_hidrico`` (arquivo único)."""
 
     async def _handler(payload: dict[str, Any]) -> None:
         await _processar(
@@ -85,12 +96,7 @@ def criar_handler_estresse_hidrico_pasta(
     repositorio_execucoes: RepositorioExecucoes,
     repositorio_resultados: RepositorioResultadoEstresseHidrico,
 ) -> HandlerEstresseHidrico:
-    """Fábrica do handler ``processar_estresse_hidrico_pasta`` (Slice 17).
-
-    Mesma estrutura do handler de arquivo único, mas chama
-    :meth:`LeitorMultiVariavel.abrir_de_pastas` para concatenar todos os
-    ``.nc`` presentes em cada uma das três pastas antes do pipeline.
-    """
+    """Fábrica do handler ``processar_estresse_hidrico_pasta`` (Slice 17)."""
 
     async def _handler(payload: dict[str, Any]) -> None:
         await _processar_de_pastas(
@@ -125,33 +131,34 @@ async def _processar(
     )
 
     try:
+        await _limpar_parciais(repositorio_resultados, execucao_id)
         dados = leitor.abrir(
             caminho_pr=Path(payload["arquivo_pr"]),
             caminho_tas=Path(payload["arquivo_tas"]),
             caminho_evap=Path(payload["arquivo_evap"]),
         )
-        df_pr = agregador.agregar_por_municipio(dados.precipitacao_diaria_mm, "pr")
-        df_tas = agregador.agregar_por_municipio(dados.temperatura_diaria_c, "tas")
-        df_evap = agregador.agregar_por_municipio(dados.evaporacao_diaria_mm, "evap")
-
-        df_combinado = _combinar_dataframes(df_pr, df_tas, df_evap)
-        resultados = _calcular_resultados_por_municipio(
-            df_combinado,
+        total = await _processar_streaming(
+            agregador=agregador,
+            repositorio_resultados=repositorio_resultados,
+            dados_pr=dados.precipitacao_diaria_mm,
+            dados_tas=dados.temperatura_diaria_c,
+            dados_evap=dados.evaporacao_diaria_mm,
             execucao_id=execucao_id,
             cenario=cenario,
             params=params,
         )
-
-        await repositorio_resultados.salvar_lote(resultados)
     except Exception:
         await _transicionar(repositorio_execucoes, execucao, StatusExecucao.FAILED, concluido=True)
         raise
 
     await _transicionar(repositorio_execucoes, execucao, StatusExecucao.COMPLETED, concluido=True)
     logger.info(
-        "HandlerEstresseHidrico concluído execucao_id=%s linhas=%d",
-        execucao_id,
-        len(resultados),
+        "Pipeline estresse hídrico concluído",
+        extra={
+            "execucao_id": execucao_id,
+            "municipios_processados": total.municipios,
+            "resultados_persistidos": total.resultados,
+        },
     )
 
 
@@ -176,104 +183,178 @@ async def _processar_de_pastas(
     )
 
     try:
+        await _limpar_parciais(repositorio_resultados, execucao_id)
         dados = leitor.abrir_de_pastas(
             pasta_pr=Path(payload["pasta_pr"]),
             pasta_tas=Path(payload["pasta_tas"]),
             pasta_evap=Path(payload["pasta_evap"]),
             cenario_esperado=cenario,
         )
-        df_pr = agregador.agregar_por_municipio(dados.precipitacao_diaria_mm, "pr")
-        df_tas = agregador.agregar_por_municipio(dados.temperatura_diaria_c, "tas")
-        df_evap = agregador.agregar_por_municipio(dados.evaporacao_diaria_mm, "evap")
-
-        df_combinado = _combinar_dataframes(df_pr, df_tas, df_evap)
-        resultados = _calcular_resultados_por_municipio(
-            df_combinado,
+        total = await _processar_streaming(
+            agregador=agregador,
+            repositorio_resultados=repositorio_resultados,
+            dados_pr=dados.precipitacao_diaria_mm,
+            dados_tas=dados.temperatura_diaria_c,
+            dados_evap=dados.evaporacao_diaria_mm,
             execucao_id=execucao_id,
             cenario=cenario,
             params=params,
         )
-
-        await repositorio_resultados.salvar_lote(resultados)
     except Exception:
         await _transicionar(repositorio_execucoes, execucao, StatusExecucao.FAILED, concluido=True)
         raise
 
     await _transicionar(repositorio_execucoes, execucao, StatusExecucao.COMPLETED, concluido=True)
     logger.info(
-        "HandlerEstresseHidricoPasta concluído execucao_id=%s linhas=%d",
-        execucao_id,
-        len(resultados),
+        "Pipeline estresse hídrico (pasta) concluído",
+        extra={
+            "execucao_id": execucao_id,
+            "municipios_processados": total.municipios,
+            "resultados_persistidos": total.resultados,
+        },
     )
 
 
-def _combinar_dataframes(
-    df_pr: pd.DataFrame,
-    df_tas: pd.DataFrame,
-    df_evap: pd.DataFrame,
-) -> pd.DataFrame:
-    """Merge inner por ``(municipio_id, data)`` expondo colunas ``pr``/``tas``/``evap``.
+class _Totais:
+    """Acumulador simples de contadores ao longo do pipeline."""
 
-    Cada DataFrame de entrada tem ``[municipio_id, data, valor, nome_variavel]``.
-    Municípios fora da interseção das três variáveis são descartados (é o
-    caso esperado quando a grade de ``evap`` tem cobertura diferente de
-    ``pr``/``tas``).
-    """
-    if df_pr.empty or df_tas.empty or df_evap.empty:
-        return pd.DataFrame(columns=["municipio_id", "data", "pr", "tas", "evap"])
+    __slots__ = ("municipios", "resultados")
 
-    def _renomear(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
-        return df[["municipio_id", "data", "valor"]].rename(columns={"valor": coluna})
-
-    merged = _renomear(df_pr, "pr").merge(
-        _renomear(df_tas, "tas"),
-        on=["municipio_id", "data"],
-        how="inner",
-    )
-    merged = merged.merge(
-        _renomear(df_evap, "evap"),
-        on=["municipio_id", "data"],
-        how="inner",
-    )
-    return merged
+    def __init__(self) -> None:
+        self.municipios = 0
+        self.resultados = 0
 
 
-def _calcular_resultados_por_municipio(
-    df: pd.DataFrame,
+async def _processar_streaming(
     *,
+    agregador: AgregadorEspacial,
+    repositorio_resultados: RepositorioResultadoEstresseHidrico,
+    dados_pr: Any,
+    dados_tas: Any,
+    dados_evap: Any,
     execucao_id: str,
     cenario: str,
     params: ParametrosIndicesEstresseHidrico,
-) -> list[ResultadoEstresseHidrico]:
-    if df.empty:
-        return []
-    # O agregador devolve ``municipio_id`` como string (vem do shapefile IBGE).
-    # A entidade persiste como int; cast explícito abaixo.
-    df = df.copy()
-    df["ano"] = pd.to_datetime(df["data"]).dt.year
-    agora = utc_now()
+) -> _Totais:
+    """Núcleo streaming: itera 3 variáveis em paralelo e persiste em batches.
 
-    resultados: list[ResultadoEstresseHidrico] = []
-    for (municipio_id_raw, ano), sub in df.groupby(["municipio_id", "ano"], sort=True):
+    Levanta ``RuntimeError`` se as 3 iterações divergirem em ``municipio_id``
+    (sinal de não-determinismo no agregador, que quebraria o pareamento).
+    """
+    iter_pr = agregador.iterar_por_municipio(dados_pr)
+    iter_tas = agregador.iterar_por_municipio(dados_tas)
+    iter_evap = agregador.iterar_por_municipio(dados_evap)
+
+    batch: list[ResultadoEstresseHidrico] = []
+    totais = _Totais()
+
+    for tripla in _zip_iteradores(iter_pr, iter_tas, iter_evap):
+        (mun_pr, datas, serie_pr), (mun_tas, _, serie_tas), (mun_evap, _, serie_evap) = tripla
+        if not (mun_pr == mun_tas == mun_evap):
+            raise RuntimeError(
+                f"Inconsistência de iteração: pr={mun_pr}, tas={mun_tas}, "
+                f"evap={mun_evap}. Verificar determinismo da ordem em "
+                "AgregadorEspacial.iterar_por_municipio."
+            )
+
+        for ano, indices_anuais in _calcular_por_ano(
+            datas=datas,
+            serie_pr=serie_pr,
+            serie_tas=serie_tas,
+            serie_evap=serie_evap,
+            params=params,
+        ):
+            batch.append(
+                ResultadoEstresseHidrico(
+                    id=gerar_id("reh"),
+                    execucao_id=execucao_id,
+                    municipio_id=int(mun_pr),
+                    ano=int(ano),
+                    cenario=cenario,
+                    frequencia_dias_secos_quentes=indices_anuais.dias_secos_quentes,
+                    intensidade_mm_dia=indices_anuais.intensidade_mm_dia,
+                    criado_em=utc_now(),
+                )
+            )
+
+        totais.municipios += 1
+
+        if len(batch) >= BATCH_SIZE:
+            await repositorio_resultados.salvar_lote(batch)
+            totais.resultados += len(batch)
+            batch = []
+
+        if totais.municipios % LOG_INTERVALO == 0:
+            logger.info(
+                "Progresso pipeline estresse hídrico",
+                extra={
+                    "execucao_id": execucao_id,
+                    "municipios_processados": totais.municipios,
+                    "resultados_persistidos": totais.resultados,
+                },
+            )
+
+    if batch:
+        await repositorio_resultados.salvar_lote(batch)
+        totais.resultados += len(batch)
+
+    return totais
+
+
+def _zip_iteradores(
+    iter_pr: Iterator[tuple[int, np.ndarray, np.ndarray]],
+    iter_tas: Iterator[tuple[int, np.ndarray, np.ndarray]],
+    iter_evap: Iterator[tuple[int, np.ndarray, np.ndarray]],
+) -> Iterator[
+    tuple[
+        tuple[int, np.ndarray, np.ndarray],
+        tuple[int, np.ndarray, np.ndarray],
+        tuple[int, np.ndarray, np.ndarray],
+    ]
+]:
+    """``zip`` tipado dos três iteradores. Para no primeiro a esgotar."""
+    yield from zip(iter_pr, iter_tas, iter_evap, strict=False)
+
+
+def _calcular_por_ano(
+    *,
+    datas: np.ndarray,
+    serie_pr: np.ndarray,
+    serie_tas: np.ndarray,
+    serie_evap: np.ndarray,
+    params: ParametrosIndicesEstresseHidrico,
+) -> Iterator[tuple[int, Any]]:
+    """Particiona séries diárias por ano e calcula índices anuais."""
+    if len(datas) == 0:
+        return
+    # ``datas`` chega como ``datetime64[ns]``; extrair ano via numpy evita
+    # construir um DatetimeIndex pandas para todo o período.
+    anos = datas.astype("datetime64[Y]").astype(int) + 1970
+    anos_unicos = np.unique(anos)
+    for ano in anos_unicos:
+        mascara = anos == ano
         indices = calcular_indices_anuais_estresse_hidrico(
-            pr_mm_dia=np.asarray(sub["pr"].to_numpy(), dtype=np.float64),
-            tas_c=np.asarray(sub["tas"].to_numpy(), dtype=np.float64),
-            evap_mm_dia=np.asarray(sub["evap"].to_numpy(), dtype=np.float64),
+            pr_mm_dia=np.asarray(serie_pr[mascara], dtype=np.float64),
+            tas_c=np.asarray(serie_tas[mascara], dtype=np.float64),
+            evap_mm_dia=np.asarray(serie_evap[mascara], dtype=np.float64),
             params=params,
         )
-        resultados.append(
-            ResultadoEstresseHidrico(
-                id=gerar_id("reh"),
-                execucao_id=execucao_id,
-                municipio_id=int(municipio_id_raw),
-                ano=int(ano),
-                cenario=cenario,
-                frequencia_dias_secos_quentes=indices.dias_secos_quentes,
-                intensidade_mm_dia=indices.intensidade_mm_dia,
-                criado_em=agora,
-            )
+        yield int(ano), indices
+
+
+async def _limpar_parciais(
+    repositorio_resultados: RepositorioResultadoEstresseHidrico,
+    execucao_id: str,
+) -> None:
+    deletados = await repositorio_resultados.deletar_por_execucao(execucao_id)
+    if deletados > 0:
+        logger.info(
+            "Resultados parciais anteriores removidos",
+            extra={
+                "execucao_id": execucao_id,
+                "linhas_removidas": deletados,
+            },
         )
-    return resultados
 
 
 async def _carregar_execucao(repo: RepositorioExecucoes, execucao_id: str) -> Execucao:
