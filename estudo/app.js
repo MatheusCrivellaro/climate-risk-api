@@ -1,5 +1,6 @@
 // Página /estudo/ — JavaScript vanilla.
 // Slice 20.2: abas, modal browser de pastas, validação inline e downloads.
+// Slice 20.3: persistência de estado em localStorage.
 
 'use strict';
 
@@ -19,6 +20,118 @@ const POLLING_INTERVAL_MS = 3000;
 const PAGE_SIZE = 50;
 const VALIDACAO_DEBOUNCE_MS = 500;
 const STATUSES_FINAIS = new Set(['completed', 'failed', 'canceled']);
+const LIMITE_HISTORICO_EXECUCOES = 50;
+
+// IMPORTANTE: ao mudar a estrutura do estado persistido,
+// incrementar o sufixo de STORAGE_KEY (v1 → v2 → ...).
+// Isso garante que estados antigos sejam ignorados em vez de causar bugs.
+const STORAGE_KEY = 'climate_risk:estudo:state:v1';
+
+// ============================================================================
+// Persistência (localStorage)
+// ============================================================================
+
+const Persistencia = {
+  carregar() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (e) {
+      console.warn('Falha ao carregar estado persistido:', e);
+      return null;
+    }
+  },
+
+  salvar(estado) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+    } catch (e) {
+      console.warn('Falha ao salvar estado:', e);
+    }
+  },
+
+  limpar() {
+    localStorage.removeItem(STORAGE_KEY);
+  },
+};
+
+function estadoVazio() {
+  return {
+    versao: 1,
+    formulario_pastas: {
+      rcp45: { pr: '', tas: '', evap: '' },
+      rcp85: { pr: '', tas: '', evap: '' },
+    },
+    execucoes: [],
+    ultimos_filtros: null,
+    ultima_aba: null,
+  };
+}
+
+function persistirCampoPasta(cenario, variavel, valor) {
+  const estado = Persistencia.carregar() || estadoVazio();
+  estado.formulario_pastas = estado.formulario_pastas || {
+    rcp45: { pr: '', tas: '', evap: '' },
+    rcp85: { pr: '', tas: '', evap: '' },
+  };
+  estado.formulario_pastas[cenario] = estado.formulario_pastas[cenario] || {
+    pr: '',
+    tas: '',
+    evap: '',
+  };
+  estado.formulario_pastas[cenario][variavel] = valor;
+  Persistencia.salvar(estado);
+}
+
+function persistirExecucoes(execucoes) {
+  const estado = Persistencia.carregar() || estadoVazio();
+  estado.execucoes = estado.execucoes || [];
+  for (const exec of execucoes) {
+    if (!exec.id) continue;
+    estado.execucoes.push({
+      execucao_id: exec.id,
+      cenario: exec.cenario,
+      criado_em: new Date().toISOString(),
+      ultimo_status: exec.status || 'pending',
+    });
+  }
+  if (estado.execucoes.length > LIMITE_HISTORICO_EXECUCOES) {
+    estado.execucoes = estado.execucoes.slice(-LIMITE_HISTORICO_EXECUCOES);
+  }
+  Persistencia.salvar(estado);
+}
+
+function atualizarStatusPersistido(execucaoId, novoStatus) {
+  const estado = Persistencia.carregar();
+  if (!estado || !estado.execucoes) return;
+  const exec = estado.execucoes.find((e) => e.execucao_id === execucaoId);
+  if (exec && exec.ultimo_status !== novoStatus) {
+    exec.ultimo_status = novoStatus;
+    Persistencia.salvar(estado);
+  }
+}
+
+function persistirFiltros() {
+  const estado = Persistencia.carregar() || estadoVazio();
+  estado.ultimos_filtros = {
+    execucao_id: qs('filtro-execucao').value,
+    cenario: qs('filtro-cenario').value,
+    ano_min: parseInt(qs('filtro-ano-min').value, 10) || null,
+    ano_max: parseInt(qs('filtro-ano-max').value, 10) || null,
+    municipio_id: null,
+    uf: qs('filtro-uf').value,
+  };
+  Persistencia.salvar(estado);
+}
+
+function persistirAba(nome) {
+  const estado = Persistencia.carregar() || estadoVazio();
+  estado.ultima_aba = nome;
+  Persistencia.salvar(estado);
+}
 
 const UFS = [
   'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -158,6 +271,8 @@ function trocarAba(nome, { atualizarHash = true } = {}) {
     state.resultadosNovosDisponiveis = false;
     qs('badge-novos-resultados').hidden = true;
   }
+
+  persistirAba(nome);
 }
 
 // ============================================================================
@@ -521,6 +636,7 @@ async function criarExecucoes(event) {
       status: item.status || (item.erro ? 'failed' : 'pending'),
       erro: item.erro || null,
     }));
+    persistirExecucoes(state.execucoesAtivas);
     renderizarStatusExecucoes();
     iniciarPolling();
   } catch (erro) {
@@ -617,6 +733,9 @@ async function atualizarStatusUmaExecucao(exec) {
   } catch (erro) {
     exec.erro = erro.message || String(erro);
     exec.status = 'failed';
+  }
+  if (exec.id) {
+    atualizarStatusPersistido(exec.id, exec.status);
   }
 }
 
@@ -767,6 +886,7 @@ function limparFiltros() {
   qs('filtro-ano-min').value = '';
   qs('filtro-ano-max').value = '';
   qs('filtro-uf').value = '';
+  persistirFiltros();
   state.filtrosAtuais = {};
   state.paginaAtual = 0;
   qs('tbody-resultados').innerHTML = `
@@ -898,6 +1018,13 @@ function ligarEventListeners() {
   document.querySelectorAll('input[data-cenario][data-variavel]').forEach((input) => {
     input.addEventListener('input', () => validarPastaDebounced(input));
     input.addEventListener('blur', () => validarPastaDebounced(input));
+    input.addEventListener('change', () => {
+      persistirCampoPasta(
+        input.dataset.cenario,
+        input.dataset.variavel,
+        limparAspas(input.value),
+      );
+    });
   });
 
   qs('modal-btn-fechar').addEventListener('click', fecharModal);
@@ -921,10 +1048,136 @@ function ligarEventListeners() {
   document.querySelectorAll('.btn-export').forEach((btn) => {
     btn.addEventListener('click', () => baixar(btn.dataset.formato));
   });
+
+  ['filtro-execucao', 'filtro-cenario', 'filtro-ano-min', 'filtro-ano-max', 'filtro-uf']
+    .forEach((id) => {
+      const elem = qs(id);
+      if (elem) elem.addEventListener('change', persistirFiltros);
+    });
+
+  qs('btn-limpar-historico').addEventListener('click', () => {
+    if (window.confirm('Limpar histórico de execuções e formulário?')) {
+      Persistencia.limpar();
+      window.location.reload();
+    }
+  });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  inicializarTabs();
+async function restaurarEstado() {
+  const estado = Persistencia.carregar();
+  if (!estado) return;
+
+  if (estado.formulario_pastas) {
+    for (const cenario of ['rcp45', 'rcp85']) {
+      for (const variavel of ['pr', 'tas', 'evap']) {
+        const valor = estado.formulario_pastas[cenario]?.[variavel];
+        if (valor) {
+          const input = qs(`${cenario}-pasta-${variavel}`);
+          if (input) {
+            input.value = valor;
+            validarPastaDebounced(input);
+          }
+        }
+      }
+    }
+  }
+
+  if (estado.ultimos_filtros) {
+    const map = {
+      execucao_id: 'filtro-execucao',
+      cenario: 'filtro-cenario',
+      ano_min: 'filtro-ano-min',
+      ano_max: 'filtro-ano-max',
+      uf: 'filtro-uf',
+    };
+    for (const [key, value] of Object.entries(estado.ultimos_filtros)) {
+      const id = map[key];
+      if (!id) continue;
+      const elem = qs(id);
+      if (elem && value !== null && value !== undefined && value !== '') {
+        elem.value = value;
+      }
+    }
+  }
+
+  if (estado.execucoes && estado.execucoes.length > 0) {
+    await reconciliarExecucoesAtivas(estado.execucoes);
+  }
+
+  if (!window.location.hash && estado.ultima_aba) {
+    trocarAba(estado.ultima_aba);
+  }
+}
+
+async function reconciliarExecucoesAtivas(execucoesPersistidas) {
+  const reconciliados = [];
+  let temNovasCompleted = false;
+
+  for (const exec of execucoesPersistidas) {
+    if (!exec.execucao_id) continue;
+    try {
+      const resp = await fetch(API.EXECUCAO_GET(exec.execucao_id), {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (resp.status === 404) {
+        continue;
+      }
+
+      if (!resp.ok) {
+        reconciliados.push(exec);
+        continue;
+      }
+
+      const data = await resp.json();
+      const statusServidor = data.status;
+
+      if (
+        (exec.ultimo_status === 'pending' || exec.ultimo_status === 'running') &&
+        statusServidor === 'completed'
+      ) {
+        temNovasCompleted = true;
+      }
+
+      exec.ultimo_status = statusServidor;
+      reconciliados.push(exec);
+
+      if (statusServidor === 'pending' || statusServidor === 'running') {
+        state.execucoesAtivas.push({
+          cenario: exec.cenario,
+          id: exec.execucao_id,
+          jobId: null,
+          status: statusServidor,
+          erro: null,
+        });
+      }
+    } catch (e) {
+      console.warn(`Falha ao reconciliar ${exec.execucao_id}:`, e);
+      reconciliados.push(exec);
+    }
+  }
+
+  const estado = Persistencia.carregar() || estadoVazio();
+  estado.execucoes = reconciliados;
+  Persistencia.salvar(estado);
+
+  if (state.execucoesAtivas.length > 0) {
+    qs('status-execucoes').hidden = false;
+    renderizarStatusExecucoes();
+    iniciarPolling();
+  }
+
+  if (temNovasCompleted && state.abaAtiva !== 'resultados') {
+    state.resultadosNovosDisponiveis = true;
+    const badge = qs('badge-novos-resultados');
+    badge.hidden = false;
+    badge.textContent = '●';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   popularSelectUFs();
   ligarEventListeners();
+  inicializarTabs();
+  await restaurarEstado();
 });

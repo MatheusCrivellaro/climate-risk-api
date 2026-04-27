@@ -80,6 +80,15 @@ operations are not permitted"` e entravam em loop de retry.
 interface visível. O código React permanece em `frontend/` para reativação
 futura, mas o mount foi removido de `interfaces/app.py`.
 
+### Persistência em /estudo/ (Slice 20.3)
+
+Estado de formulário, filtros e execuções é salvo em `localStorage` com
+chave `climate_risk:estudo:state:v1`. Ao mudar o schema do estado,
+incrementar a versão (`v1` → `v2` → ...). Ao recarregar a página,
+execuções pendentes/em execução são reconciliadas com o servidor: 404
+remove silenciosamente, completed/failed atualiza `ultimo_status`,
+pending/running retoma o polling. Limite de 50 execuções no histórico.
+
 ## Convenções
 
 - Arquitetura hexagonal com camadas explícitas (ADR-005): `domain`,

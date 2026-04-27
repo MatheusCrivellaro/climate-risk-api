@@ -109,3 +109,24 @@ async def test_estudo_nao_interfere_com_docs(cliente_api: AsyncClient) -> None:
     resposta = await cliente_api.get("/docs")
     assert resposta.status_code == 200
     assert resposta.headers["content-type"].startswith("text/html")
+
+
+@pytest.mark.asyncio
+async def test_estudo_index_tem_botao_limpar_historico(
+    cliente_api: AsyncClient,
+) -> None:
+    """Slice 20.3: botão para limpar histórico persistido em localStorage."""
+    resposta = await cliente_api.get("/estudo/")
+    assert resposta.status_code == 200
+    assert 'id="btn-limpar-historico"' in resposta.text
+
+
+@pytest.mark.asyncio
+async def test_estudo_app_js_usa_localstorage(cliente_api: AsyncClient) -> None:
+    """Slice 20.3: smoke test — app.js referencia STORAGE_KEY e localStorage."""
+    resposta = await cliente_api.get("/estudo/app.js")
+    assert resposta.status_code == 200
+    js = resposta.text
+    assert "STORAGE_KEY" in js
+    assert "localStorage.getItem(STORAGE_KEY)" in js
+    assert "climate_risk:estudo:state:v1" in js
