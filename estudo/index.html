@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estudo de Estresse Hídrico — Climate Risk API</title>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
     <link rel="stylesheet" href="estilos.css" />
     <script
       src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
@@ -12,259 +13,475 @@
     <script src="app.js" defer></script>
   </head>
   <body>
-    <header class="site-header">
-      <h1>Estudo de Estresse Hídrico</h1>
-      <p class="site-subtitle">
-        Interface simplificada para criar execuções e consultar resultados do
-        pipeline de estresse hídrico.
-      </p>
+    <header class="topo">
+      <div class="topo-conteudo">
+        <h1>Estudo de Estresse Hídrico</h1>
+        <p class="subtitulo">
+          Pipeline CORDEX — análise de dias secos quentes e déficit hídrico
+        </p>
+      </div>
     </header>
 
     <main>
+      <nav class="tabs" role="tablist" aria-label="Navegação principal">
+        <button
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="tab-nova"
+          data-tab="nova"
+          id="tab-button-nova"
+          class="tab-button tab-ativa"
+        >
+          Nova execução
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="tab-resultados"
+          data-tab="resultados"
+          id="tab-button-resultados"
+          class="tab-button"
+          tabindex="-1"
+        >
+          Resultados
+          <span class="tab-badge" id="badge-novos-resultados" hidden></span>
+        </button>
+      </nav>
+
       <section
-        class="card"
-        aria-labelledby="criar-titulo"
-        aria-describedby="criar-descricao"
+        id="tab-nova"
+        role="tabpanel"
+        aria-labelledby="tab-button-nova"
+        class="tab-panel"
       >
-        <h2 id="criar-titulo">Criar execuções de estresse hídrico (lote)</h2>
-        <p id="criar-descricao" class="muted">
-          Informe as pastas com os arquivos NetCDF (precipitação, temperatura
-          do ar e evaporação) para os dois cenários CORDEX. Um clique cria
-          duas execuções — rcp45 e rcp85.
-        </p>
+        <form id="form-criar-execucoes" novalidate>
+          <div class="cards-cenarios">
+            <article class="card-cenario card-rcp45">
+              <header class="card-cenario-header">
+                <h2>Cenário rcp45</h2>
+                <span class="card-cenario-tag">moderado</span>
+              </header>
 
-        <form id="form-execucao" novalidate>
-          <div class="cenarios-grid">
-            <fieldset class="cenario-card cenario-rcp45">
-              <legend>Cenário rcp45</legend>
-              <div class="campo">
+              <div class="campo-pasta">
                 <label for="rcp45-pasta-pr">Pasta de precipitação (pr)</label>
-                <input
-                  type="text"
-                  id="rcp45-pasta-pr"
-                  name="rcp45-pasta-pr"
-                  placeholder="/dados/cordex/rcp45/pr"
-                  required
-                  autocomplete="off"
-                />
+                <div class="input-com-botao">
+                  <input
+                    type="text"
+                    id="rcp45-pasta-pr"
+                    name="rcp45-pasta-pr"
+                    placeholder="C:\dados\pr\rcp45"
+                    autocomplete="off"
+                    required
+                    data-cenario="rcp45"
+                    data-variavel="pr"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-procurar"
+                    data-target="rcp45-pasta-pr"
+                    aria-label="Procurar pasta de precipitação rcp45"
+                  >
+                    <span aria-hidden="true">📁</span> Procurar
+                  </button>
+                </div>
+                <p class="feedback" id="feedback-rcp45-pasta-pr"></p>
               </div>
-              <div class="campo">
-                <label for="rcp45-pasta-tas">Pasta de temperatura (tas)</label>
-                <input
-                  type="text"
-                  id="rcp45-pasta-tas"
-                  name="rcp45-pasta-tas"
-                  placeholder="/dados/cordex/rcp45/tas"
-                  required
-                  autocomplete="off"
-                />
-              </div>
-              <div class="campo">
-                <label for="rcp45-pasta-evap">Pasta de evaporação (evspsbl)</label>
-                <input
-                  type="text"
-                  id="rcp45-pasta-evap"
-                  name="rcp45-pasta-evap"
-                  placeholder="/dados/cordex/rcp45/evap"
-                  required
-                  autocomplete="off"
-                />
-              </div>
-            </fieldset>
 
-            <fieldset class="cenario-card cenario-rcp85">
-              <legend>Cenário rcp85</legend>
-              <div class="campo">
+              <div class="campo-pasta">
+                <label for="rcp45-pasta-tas">Pasta de temperatura (tas)</label>
+                <div class="input-com-botao">
+                  <input
+                    type="text"
+                    id="rcp45-pasta-tas"
+                    name="rcp45-pasta-tas"
+                    placeholder="C:\dados\tas\rcp45"
+                    autocomplete="off"
+                    required
+                    data-cenario="rcp45"
+                    data-variavel="tas"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-procurar"
+                    data-target="rcp45-pasta-tas"
+                    aria-label="Procurar pasta de temperatura rcp45"
+                  >
+                    <span aria-hidden="true">📁</span> Procurar
+                  </button>
+                </div>
+                <p class="feedback" id="feedback-rcp45-pasta-tas"></p>
+              </div>
+
+              <div class="campo-pasta">
+                <label for="rcp45-pasta-evap">Pasta de evaporação (evspsbl)</label>
+                <div class="input-com-botao">
+                  <input
+                    type="text"
+                    id="rcp45-pasta-evap"
+                    name="rcp45-pasta-evap"
+                    placeholder="C:\dados\evap\rcp45"
+                    autocomplete="off"
+                    required
+                    data-cenario="rcp45"
+                    data-variavel="evap"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-procurar"
+                    data-target="rcp45-pasta-evap"
+                    aria-label="Procurar pasta de evaporação rcp45"
+                  >
+                    <span aria-hidden="true">📁</span> Procurar
+                  </button>
+                </div>
+                <p class="feedback" id="feedback-rcp45-pasta-evap"></p>
+              </div>
+            </article>
+
+            <article class="card-cenario card-rcp85">
+              <header class="card-cenario-header">
+                <h2>Cenário rcp85</h2>
+                <span class="card-cenario-tag">extremo</span>
+              </header>
+
+              <div class="campo-pasta">
                 <label for="rcp85-pasta-pr">Pasta de precipitação (pr)</label>
-                <input
-                  type="text"
-                  id="rcp85-pasta-pr"
-                  name="rcp85-pasta-pr"
-                  placeholder="/dados/cordex/rcp85/pr"
-                  required
-                  autocomplete="off"
-                />
+                <div class="input-com-botao">
+                  <input
+                    type="text"
+                    id="rcp85-pasta-pr"
+                    name="rcp85-pasta-pr"
+                    placeholder="C:\dados\pr\rcp85"
+                    autocomplete="off"
+                    required
+                    data-cenario="rcp85"
+                    data-variavel="pr"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-procurar"
+                    data-target="rcp85-pasta-pr"
+                    aria-label="Procurar pasta de precipitação rcp85"
+                  >
+                    <span aria-hidden="true">📁</span> Procurar
+                  </button>
+                </div>
+                <p class="feedback" id="feedback-rcp85-pasta-pr"></p>
               </div>
-              <div class="campo">
+
+              <div class="campo-pasta">
                 <label for="rcp85-pasta-tas">Pasta de temperatura (tas)</label>
-                <input
-                  type="text"
-                  id="rcp85-pasta-tas"
-                  name="rcp85-pasta-tas"
-                  placeholder="/dados/cordex/rcp85/tas"
-                  required
-                  autocomplete="off"
-                />
+                <div class="input-com-botao">
+                  <input
+                    type="text"
+                    id="rcp85-pasta-tas"
+                    name="rcp85-pasta-tas"
+                    placeholder="C:\dados\tas\rcp85"
+                    autocomplete="off"
+                    required
+                    data-cenario="rcp85"
+                    data-variavel="tas"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-procurar"
+                    data-target="rcp85-pasta-tas"
+                    aria-label="Procurar pasta de temperatura rcp85"
+                  >
+                    <span aria-hidden="true">📁</span> Procurar
+                  </button>
+                </div>
+                <p class="feedback" id="feedback-rcp85-pasta-tas"></p>
               </div>
-              <div class="campo">
+
+              <div class="campo-pasta">
                 <label for="rcp85-pasta-evap">Pasta de evaporação (evspsbl)</label>
-                <input
-                  type="text"
-                  id="rcp85-pasta-evap"
-                  name="rcp85-pasta-evap"
-                  placeholder="/dados/cordex/rcp85/evap"
-                  required
-                  autocomplete="off"
-                />
+                <div class="input-com-botao">
+                  <input
+                    type="text"
+                    id="rcp85-pasta-evap"
+                    name="rcp85-pasta-evap"
+                    placeholder="C:\dados\evap\rcp85"
+                    autocomplete="off"
+                    required
+                    data-cenario="rcp85"
+                    data-variavel="evap"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-procurar"
+                    data-target="rcp85-pasta-evap"
+                    aria-label="Procurar pasta de evaporação rcp85"
+                  >
+                    <span aria-hidden="true">📁</span> Procurar
+                  </button>
+                </div>
+                <p class="feedback" id="feedback-rcp85-pasta-evap"></p>
               </div>
-            </fieldset>
+            </article>
           </div>
 
-          <details class="avancado">
+          <details class="parametros-avancados">
             <summary>Parâmetros avançados</summary>
-            <div class="avancado-grid">
+            <div class="campos-params">
               <div class="campo">
-                <label for="limiar_pr_mm_dia">Limiar pr (mm/dia)</label>
+                <label for="limiar-pr">
+                  Precipitação máx. (mm/dia) para "dia seco"
+                </label>
                 <input
                   type="number"
-                  id="limiar_pr_mm_dia"
+                  id="limiar-pr"
                   name="limiar_pr_mm_dia"
                   value="1.0"
                   step="0.5"
                   min="0"
                 />
-                <small class="hint">Dia "seco" quando pr &le; limiar.</small>
               </div>
               <div class="campo">
-                <label for="limiar_tas_c">Limiar tas (°C)</label>
+                <label for="limiar-tas">
+                  Temperatura mín. (°C) para "dia quente"
+                </label>
                 <input
                   type="number"
-                  id="limiar_tas_c"
+                  id="limiar-tas"
                   name="limiar_tas_c"
                   value="30.0"
                   step="1"
                 />
-                <small class="hint">Dia "quente" quando tas &ge; limiar.</small>
               </div>
             </div>
           </details>
 
-          <div class="acoes">
-            <button type="submit" id="btn-criar" class="btn btn-primario">
+          <div class="form-acoes">
+            <button
+              type="submit"
+              id="btn-criar"
+              class="btn btn-primary btn-grande"
+            >
               Criar execuções
             </button>
           </div>
 
           <div
             id="feedback-criar"
-            class="feedback"
+            class="feedback-form"
             role="status"
             aria-live="polite"
           ></div>
         </form>
-      </section>
 
-      <section class="card" aria-labelledby="resultados-titulo">
-        <h2 id="resultados-titulo">Consultar resultados</h2>
-        <p class="muted">
-          Filtre por execução, cenário, intervalo de anos ou UF.
-        </p>
-
-        <form id="form-filtros" class="filtros">
-          <div class="campo">
-            <label for="filtro-execucao">Execução</label>
-            <input
-              type="text"
-              id="filtro-execucao"
-              name="execucao_id"
-              placeholder="exec_..."
-              autocomplete="off"
-            />
-          </div>
-          <div class="campo">
-            <label for="filtro-cenario">Cenário</label>
-            <select id="filtro-cenario" name="cenario">
-              <option value="">Todos</option>
-              <option value="rcp45">rcp45</option>
-              <option value="rcp85">rcp85</option>
-            </select>
-          </div>
-          <div class="campo">
-            <label for="filtro-ano-min">Ano mín.</label>
-            <input
-              type="number"
-              id="filtro-ano-min"
-              name="ano_min"
-              placeholder="2026"
-            />
-          </div>
-          <div class="campo">
-            <label for="filtro-ano-max">Ano máx.</label>
-            <input
-              type="number"
-              id="filtro-ano-max"
-              name="ano_max"
-              placeholder="2035"
-            />
-          </div>
-          <div class="campo">
-            <label for="filtro-uf">UF</label>
-            <select id="filtro-uf" name="uf">
-              <option value="">Todas</option>
-            </select>
-          </div>
-          <div class="campo acoes-filtros">
-            <button type="submit" class="btn btn-primario">Buscar</button>
-            <button type="button" id="btn-limpar" class="btn btn-secundario">
-              Limpar filtros
-            </button>
-          </div>
-        </form>
-
-        <div
-          id="grafico-wrapper"
-          class="grafico-wrapper"
+        <section
+          id="status-execucoes"
+          class="status-execucoes"
           aria-live="polite"
           hidden
         >
-          <canvas id="grafico-anos" height="220"></canvas>
-        </div>
+          <h2>Execuções em andamento</h2>
+          <div id="cards-status" class="cards-status"></div>
+        </section>
+      </section>
 
-        <div class="tabela-wrapper">
-          <table id="tabela-resultados" aria-describedby="contador-resultados">
-            <thead>
-              <tr>
-                <th scope="col">Município</th>
-                <th scope="col">UF</th>
-                <th scope="col">Cenário</th>
-                <th scope="col">Ano</th>
-                <th scope="col">Frequência (dias)</th>
-                <th scope="col">Intensidade (mm/dia)</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-resultados">
-              <tr class="linha-vazia">
-                <td colspan="6">
-                  Ajuste os filtros e clique em "Buscar" para carregar
-                  resultados.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <section
+        id="tab-resultados"
+        role="tabpanel"
+        aria-labelledby="tab-button-resultados"
+        class="tab-panel"
+        hidden
+      >
+        <section class="filtros-resultados">
+          <h2>Filtros</h2>
+          <form id="form-filtros" class="grid-filtros" novalidate>
+            <div class="campo">
+              <label for="filtro-execucao">Execução</label>
+              <input
+                type="text"
+                id="filtro-execucao"
+                name="execucao_id"
+                placeholder="exec_01..."
+                autocomplete="off"
+              />
+            </div>
+            <div class="campo">
+              <label for="filtro-cenario">Cenário</label>
+              <select id="filtro-cenario" name="cenario">
+                <option value="">Todos</option>
+                <option value="rcp45">rcp45</option>
+                <option value="rcp85">rcp85</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="filtro-ano-min">Ano mín.</label>
+              <input
+                type="number"
+                id="filtro-ano-min"
+                name="ano_min"
+                min="2020"
+                max="2100"
+              />
+            </div>
+            <div class="campo">
+              <label for="filtro-ano-max">Ano máx.</label>
+              <input
+                type="number"
+                id="filtro-ano-max"
+                name="ano_max"
+                min="2020"
+                max="2100"
+              />
+            </div>
+            <div class="campo">
+              <label for="filtro-uf">UF</label>
+              <select id="filtro-uf" name="uf">
+                <option value="">Todas</option>
+              </select>
+            </div>
+          </form>
 
-        <div class="rodape-tabela">
-          <span
-            id="contador-resultados"
-            class="muted"
-            aria-live="polite"
-          ></span>
-          <div class="paginacao">
-            <button type="button" id="btn-anterior" class="btn btn-secundario" disabled>
-              Anterior
+          <div class="acoes-filtros">
+            <button type="button" class="btn btn-primary" id="btn-buscar">
+              Buscar
             </button>
-            <button type="button" id="btn-proxima" class="btn btn-secundario" disabled>
-              Próxima
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="btn-limpar-filtros"
+            >
+              Limpar filtros
             </button>
           </div>
-        </div>
+        </section>
+
+        <section class="resultados-conteudo">
+          <header class="resultados-header">
+            <span id="contador-resultados" class="contador">
+              Nenhum resultado carregado
+            </span>
+            <div class="btn-grupo-export">
+              <button
+                type="button"
+                class="btn btn-secondary btn-export"
+                data-formato="csv"
+              >
+                <span aria-hidden="true">📄</span> CSV
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-export"
+                data-formato="xlsx"
+              >
+                <span aria-hidden="true">📊</span> Excel
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-export"
+                data-formato="json"
+              >
+                <span aria-hidden="true">🔗</span> JSON
+              </button>
+              <label class="checkbox-export">
+                <input type="checkbox" id="export-tudo" />
+                <span>Baixar tudo (sem filtros)</span>
+              </label>
+            </div>
+          </header>
+
+          <div id="grafico-frequencia-anual" class="grafico-wrapper" hidden>
+            <h3>Frequência média por ano</h3>
+            <canvas id="canvas-grafico" height="220"></canvas>
+          </div>
+
+          <div class="tabela-wrapper">
+            <table id="tabela-resultados">
+              <thead>
+                <tr>
+                  <th scope="col">Município</th>
+                  <th scope="col">UF</th>
+                  <th scope="col">Cenário</th>
+                  <th scope="col">Ano</th>
+                  <th scope="col">Frequência (dias)</th>
+                  <th scope="col">Intensidade (mm/dia)</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-resultados">
+                <tr class="linha-vazia">
+                  <td colspan="6">
+                    Ajuste os filtros e clique em "Buscar" para carregar
+                    resultados.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <nav class="paginacao" aria-label="Paginação dos resultados">
+            <button type="button" id="btn-pag-anterior" class="btn btn-secondary" disabled>
+              ← Anterior
+            </button>
+            <span id="info-paginacao" class="info-paginacao"></span>
+            <button type="button" id="btn-pag-proxima" class="btn btn-secondary" disabled>
+              Próxima →
+            </button>
+          </nav>
+        </section>
       </section>
     </main>
 
-    <footer class="site-footer">
-      <span>
-        <a href="/docs">API docs</a>
-      </span>
+    <dialog id="modal-browser-pastas" aria-labelledby="modal-titulo">
+      <article class="modal-content">
+        <header class="modal-header">
+          <h2 id="modal-titulo">Selecionar pasta</h2>
+          <button
+            type="button"
+            class="btn-fechar"
+            id="modal-btn-fechar"
+            aria-label="Fechar modal"
+          >
+            ×
+          </button>
+        </header>
+
+        <nav
+          class="modal-breadcrumb"
+          id="modal-breadcrumb"
+          aria-label="Caminho atual"
+        ></nav>
+
+        <div class="modal-body">
+          <ul
+            class="lista-pastas"
+            id="modal-lista-pastas"
+            aria-label="Subpastas e arquivos"
+          ></ul>
+          <div
+            class="cenario-detectado"
+            id="modal-cenario-detectado"
+            hidden
+          ></div>
+        </div>
+
+        <footer class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            id="modal-btn-cancelar"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            id="modal-btn-selecionar"
+          >
+            Selecionar esta pasta
+          </button>
+        </footer>
+      </article>
+    </dialog>
+
+    <footer class="rodape">
+      <small>API: <a href="/docs">/docs</a></small>
     </footer>
   </body>
 </html>
