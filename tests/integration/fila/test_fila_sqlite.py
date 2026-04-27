@@ -7,6 +7,7 @@ com ênfase em **atomicidade** da aquisição (Teste 3).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 
 import pytest
@@ -231,6 +232,112 @@ async def test_recuperar_zumbis_devolve_para_pending(fila_sessao: AsyncSession) 
     assert orm.status == StatusJob.PENDING
     assert orm.tentativas == 1  # a morte conta como tentativa
     assert orm.heartbeat is None
+
+
+# ---------------------------------------------------------------------
+# Teste 10 — concluir_com_falha após handler quebrado (sessão suja)
+# ---------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_concluir_com_falha_apos_handler_quebrado(
+    fila_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Simula o cenário real: handler levanta exceção sem fazer commit/rollback,
+    deixando a sessão da fila em estado inconsistente. ``concluir_com_falha``
+    com sessionmaker injetado deve gravar o status ``failed`` numa sessão
+    isolada e não propagar exceções."""
+    async with fila_sessionmaker() as sessao_setup:
+        fila_setup = FilaSQLite(sessao_setup)
+        await fila_setup.enfileirar("noop", {})
+
+    async with fila_sessionmaker() as sessao_worker:
+        fila = FilaSQLite(sessao_worker, sessionmaker=fila_sessionmaker)
+        adquirido = await fila.adquirir_proximo()
+        assert adquirido is not None
+
+        # Simula handler quebrado: tenta executar uma query que falha sem
+        # commit/rollback explícito, deixando a sessão "suja".
+        from sqlalchemy import text
+
+        with contextlib.suppress(Exception):
+            await sessao_worker.execute(text("SELECT * FROM tabela_inexistente"))
+
+        # Deve concluir sem propagar exceção, mesmo com sessão suja.
+        await fila.concluir_com_falha(adquirido.id, erro="boom", proxima_tentativa_em=None)
+
+    async with fila_sessionmaker() as sessao_check:
+        orm = await sessao_check.get(JobORM, adquirido.id)
+        assert orm is not None
+        assert orm.status == StatusJob.FAILED
+        assert orm.erro == "boom"
+
+
+# ---------------------------------------------------------------------
+# Teste 11 — limite de retry: 3ª falha consecutiva → failed definitivo
+# ---------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_job_que_falha_3_vezes_marcado_definitivamente_failed(
+    fila_sessao: AsyncSession,
+) -> None:
+    """Mesmo pedindo retry, ``concluir_com_falha`` força ``failed`` se o job
+    já atingiu :data:`MAX_TENTATIVAS` (rede de segurança contra loops de
+    crash)."""
+    fila = FilaSQLite(fila_sessao)
+    job = await fila.enfileirar("noop", {}, max_tentativas=3)
+
+    proxima_futura = utc_now() + _seg(60)
+    for n_falha in (1, 2, 3):
+        adquirido = await fila.adquirir_proximo()
+        assert adquirido is not None, f"falha {n_falha}: sem job para adquirir"
+        await fila.concluir_com_falha(
+            job.id, erro=f"falha {n_falha}", proxima_tentativa_em=proxima_futura
+        )
+        # Após cada falha o job fica pending mas com ``proxima_tentativa_em``
+        # no futuro — antecipa para que o próximo ``adquirir_proximo`` pegue.
+        await fila_sessao.execute(
+            update(JobORM)
+            .where(JobORM.id == job.id)
+            .values(proxima_tentativa_em=datetime_para_iso(utc_now() - _seg(60)))
+        )
+        await fila_sessao.commit()
+
+    orm = await fila_sessao.get(JobORM, job.id)
+    assert orm is not None
+    assert orm.status == StatusJob.FAILED, (
+        f"Após 3 falhas o job devia estar FAILED, está {orm.status}"
+    )
+    assert orm.tentativas == 3
+    assert orm.concluido_em is not None
+
+
+# ---------------------------------------------------------------------
+# Teste 12 — limite de retry para zumbis: 3 timeouts consecutivos → failed
+# ---------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_job_zumbi_recuperado_3_vezes_marcado_failed(
+    fila_sessao: AsyncSession,
+) -> None:
+    """Zumbis que excederiam ``MAX_TENTATIVAS`` no incremento ficam
+    ``failed`` em vez de voltar para ``pending``."""
+    fila = FilaSQLite(fila_sessao)
+    job = await fila.enfileirar("noop", {}, max_tentativas=3)
+
+    for n_zumbi in (1, 2, 3):
+        adquirido = await fila.adquirir_proximo()
+        assert adquirido is not None, f"zumbi {n_zumbi}: nada para adquirir"
+        # Simula heartbeat antigo para o sweep classificar como zumbi.
+        heartbeat_antigo = datetime_para_iso(utc_now() - _seg(300))
+        await fila_sessao.execute(
+            update(JobORM).where(JobORM.id == job.id).values(heartbeat=heartbeat_antigo)
+        )
+        await fila_sessao.commit()
+        await fila.recuperar_zumbis(timeout_segundos=60)
+
+    orm = await fila_sessao.get(JobORM, job.id)
+    assert orm is not None
+    assert orm.status == StatusJob.FAILED, (
+        f"Após 3 zumbis o job devia estar FAILED, está {orm.status}"
+    )
+    assert orm.tentativas == 3
 
 
 # ---------------------------------------------------------------------

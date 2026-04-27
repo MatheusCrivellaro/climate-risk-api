@@ -319,12 +319,15 @@ class LeitorCordexMultiVariavel:
         pasta_evap: Path,
         cenario_esperado: str,
     ) -> DadosClimaticosMultiVariaveis:
-        """Lê todos os ``.nc`` de cada pasta, concatena no tempo, valida cenário.
+        """Lê todos os ``.nc`` de cada pasta de forma lazy (chunks dask).
 
         Cada pasta deve conter um ou mais arquivos NetCDF da mesma variável
-        e mesmo cenário; os arquivos são concatenados ao longo do eixo
-        temporal e ordenados. Timestamps duplicados (caso haja sobreposição
-        entre arquivos) são deduplicados mantendo o primeiro.
+        e mesmo cenário; os arquivos são abertos via :func:`xr.open_mfdataset`
+        com ``chunks={"time": 365}``, mantendo os dados em chunks dask sem
+        materializar em RAM. Timestamps duplicados (caso haja sobreposição
+        entre arquivos) são deduplicados mantendo o primeiro. O retorno é
+        sempre **lazy** — a materialização acontece no agregador, ao iterar
+        município a município.
 
         Args:
             pasta_pr: Diretório com os arquivos de precipitação.
@@ -348,54 +351,49 @@ class LeitorCordexMultiVariavel:
         )
 
         cenario_alvo = cenario_esperado.strip().lower()
-        datasets_para_fechar: list[xr.Dataset] = []
-        try:
-            da_por_rotulo: dict[str, xr.DataArray] = {}
-            for rotulo, pasta, esperada in rotulados:
-                arquivos = sorted(pasta.glob("*.nc"))
-                if not arquivos:
-                    raise ErroPastaVazia(caminho=str(pasta), rotulo=rotulo)
-                da_concat = self._abrir_e_concatenar_pasta(
-                    arquivos=arquivos,
-                    esperada=esperada,
-                    cenario_alvo=cenario_alvo,
-                    datasets_para_fechar=datasets_para_fechar,
-                )
-                da_por_rotulo[esperada] = da_concat
-
-            da_pr = da_por_rotulo["pr"]
-            da_tas = da_por_rotulo["tas"]
-            da_evap = da_por_rotulo["evspsbl"]
-
-            tempo_comum = self._intersectar_tempo(da_pr, da_tas, da_evap)
-            if len(tempo_comum) == 0:
-                raise ErroLeituraNetCDF(
-                    caminho=str(pasta_pr),
-                    detalhe=(
-                        "interseção temporal vazia entre as pastas "
-                        f"pr=[{_resumo_tempo(da_pr)}], "
-                        f"tas=[{_resumo_tempo(da_tas)}], "
-                        f"evap=[{_resumo_tempo(da_evap)}]."
-                    ),
-                )
-
-            da_pr = da_pr.sel(time=tempo_comum).load()
-            da_tas = da_tas.sel(time=tempo_comum).load()
-            da_evap = da_evap.sel(time=tempo_comum).load()
-
-            entidade = DadosClimaticosMultiVariaveis(
-                precipitacao_diaria_mm=da_pr,
-                temperatura_diaria_c=da_tas,
-                evaporacao_diaria_mm=da_evap,
-                tempo=tempo_comum,
-                cenario=cenario_alvo,
+        da_por_rotulo: dict[str, xr.DataArray] = {}
+        for rotulo, pasta, esperada in rotulados:
+            arquivos = sorted(pasta.glob("*.nc"))
+            if not arquivos:
+                raise ErroPastaVazia(caminho=str(pasta), rotulo=rotulo)
+            da_concat = self._abrir_e_concatenar_pasta(
+                arquivos=arquivos,
+                esperada=esperada,
+                cenario_alvo=cenario_alvo,
             )
-            entidade.validar()
-            return entidade
-        finally:
-            for ds in datasets_para_fechar:
-                with contextlib.suppress(Exception):
-                    ds.close()
+            da_por_rotulo[esperada] = da_concat
+
+        da_pr = da_por_rotulo["pr"]
+        da_tas = da_por_rotulo["tas"]
+        da_evap = da_por_rotulo["evspsbl"]
+
+        tempo_comum = self._intersectar_tempo(da_pr, da_tas, da_evap)
+        if len(tempo_comum) == 0:
+            raise ErroLeituraNetCDF(
+                caminho=str(pasta_pr),
+                detalhe=(
+                    "interseção temporal vazia entre as pastas "
+                    f"pr=[{_resumo_tempo(da_pr)}], "
+                    f"tas=[{_resumo_tempo(da_tas)}], "
+                    f"evap=[{_resumo_tempo(da_evap)}]."
+                ),
+            )
+
+        # Não chamamos ``.load()``: mantemos os DataArrays lazy. O agregador
+        # materializa por município ao chamar ``np.asarray(dados.values)``.
+        da_pr = da_pr.sel(time=tempo_comum)
+        da_tas = da_tas.sel(time=tempo_comum)
+        da_evap = da_evap.sel(time=tempo_comum)
+
+        entidade = DadosClimaticosMultiVariaveis(
+            precipitacao_diaria_mm=da_pr,
+            temperatura_diaria_c=da_tas,
+            evaporacao_diaria_mm=da_evap,
+            tempo=tempo_comum,
+            cenario=cenario_alvo,
+        )
+        entidade.validar()
+        return entidade
 
     def _abrir_e_concatenar_pasta(
         self,
@@ -403,40 +401,66 @@ class LeitorCordexMultiVariavel:
         arquivos: list[Path],
         esperada: str,
         cenario_alvo: str,
-        datasets_para_fechar: list[xr.Dataset],
     ) -> xr.DataArray:
-        """Abre e concatena temporalmente todos os ``.nc`` de uma pasta.
+        """Abre todos os ``.nc`` de uma pasta de forma lazy via ``open_mfdataset``.
 
-        Para cada arquivo: valida o cenário (atributo ``experiment_id`` ou
-        regex no nome), extrai e padroniza a variável principal. Concatena
-        os ``DataArray`` resultantes no eixo ``time``, ordena por tempo e
-        deduplica timestamps repetidos (mantendo o primeiro).
+        - Pre-scan rápido (apenas atributos) para validar cenário arquivo a
+          arquivo antes de abrir o conjunto completo.
+        - :func:`xr.open_mfdataset` com ``combine="nested"`` + ``concat_dim="time"``
+          concatena ao longo do eixo temporal preservando chunks dask.
+        - Conversão de unidade e normalização de calendário operam sobre o
+          resultado lazy (preservando chunks).
+        - Dedup de timestamps duplicados acontece via ``isel`` sobre uma
+          máscara booleana — operação lazy em dask.
         """
-        arrays: list[xr.DataArray] = []
-        cenarios_por_caminho: dict[str, str] = {}
         for arquivo in arquivos:
-            ds = self._abrir_dataset(arquivo)
-            datasets_para_fechar.append(ds)
-            cenario_arquivo = _inferir_cenario_arquivo(str(arquivo), ds)
-            cenarios_por_caminho[str(arquivo)] = cenario_arquivo
-            if cenario_arquivo != "unknown" and cenario_arquivo != cenario_alvo:
-                raise ErroCenarioInconsistente(
-                    {
-                        str(arquivo): cenario_arquivo,
-                        "<esperado>": cenario_alvo,
-                    }
+            self._validar_cenario_arquivo(arquivo, cenario_alvo)
+
+        logger.info(
+            "Abrindo %d arquivos da pasta de '%s' via open_mfdataset (chunks=time:365)",
+            len(arquivos),
+            esperada,
+        )
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                ds = xr.open_mfdataset(
+                    [str(p) for p in arquivos],
+                    combine="nested",
+                    concat_dim="time",
+                    chunks={"time": 365},
+                    decode_times=True,
+                    use_cftime=True,
+                    engine="netcdf4",
+                    parallel=False,
                 )
-            da = self._extrair_e_padronizar(ds, arquivo, esperada=esperada)
-            arrays.append(da)
+        except FileNotFoundError as erro:
+            raise ErroArquivoNCNaoEncontrado(caminho=str(arquivos[0]), detalhe=str(erro)) from erro
+        except Exception as erro:
+            raise ErroLeituraNetCDF(caminho=str(arquivos[0]), detalhe=str(erro)) from erro
 
-        concatenado = arrays[0] if len(arrays) == 1 else xr.concat(arrays, dim="time", join="outer")
+        nome = _identificar_variavel_principal(str(arquivos[0]), ds)
+        if nome != esperada:
+            logger.warning(
+                "Pasta de '%s' tinha variável '%s'; seguindo mesmo assim.",
+                esperada,
+                nome,
+            )
+        da = ds[nome]
+        if "time" not in da.dims:
+            raise ErroLeituraNetCDF(
+                caminho=str(arquivos[0]),
+                detalhe=f"variável '{nome}' não possui dimensão 'time'.",
+            )
 
-        tempo = pd.DatetimeIndex(concatenado["time"].values)
-        ordem = tempo.argsort()
-        concatenado = concatenado.isel(time=ordem)
-        tempo_ordenado = pd.DatetimeIndex(concatenado["time"].values)
+        if nome in ("pr", "evspsbl"):
+            da = _converter_unidade_precipitacao(da)
+        elif nome == "tas":
+            da = _converter_unidade_temperatura(da)
+        da = _normalizar_calendario(da)
 
-        duplicados_mask = tempo_ordenado.duplicated(keep="first")
+        tempo = pd.DatetimeIndex(da["time"].values)
+        duplicados_mask = tempo.duplicated(keep="first")
         if bool(duplicados_mask.any()):
             n_dup = int(duplicados_mask.sum())
             logger.warning(
@@ -444,10 +468,31 @@ class LeitorCordexMultiVariavel:
                 esperada,
                 n_dup,
             )
-            mantidos = ~duplicados_mask
-            concatenado = concatenado.isel(time=np.flatnonzero(mantidos))
+            da = da.isel(time=np.flatnonzero(~duplicados_mask))
 
-        return concatenado
+        return da
+
+    def _validar_cenario_arquivo(self, arquivo: Path, cenario_alvo: str) -> None:
+        """Lê apenas atributos do ``.nc`` para validar o cenário CORDEX.
+
+        Usa ``decode_times=False`` para evitar custo de decodificação do
+        eixo temporal — só precisamos de ``ds.attrs``.
+        """
+        try:
+            with xr.open_dataset(arquivo, decode_times=False) as ds_meta:
+                cenario_arquivo = _inferir_cenario_arquivo(str(arquivo), ds_meta)
+        except FileNotFoundError as erro:
+            raise ErroArquivoNCNaoEncontrado(caminho=str(arquivo), detalhe=str(erro)) from erro
+        except Exception as erro:
+            raise ErroLeituraNetCDF(caminho=str(arquivo), detalhe=str(erro)) from erro
+
+        if cenario_arquivo != "unknown" and cenario_arquivo != cenario_alvo:
+            raise ErroCenarioInconsistente(
+                {
+                    str(arquivo): cenario_arquivo,
+                    "<esperado>": cenario_alvo,
+                }
+            )
 
 
 def _resumo_tempo(da: xr.DataArray) -> str:

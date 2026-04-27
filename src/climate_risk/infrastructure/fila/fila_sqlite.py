@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import or_, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from climate_risk.core.ids import gerar_id
 from climate_risk.core.tempo import utc_now
@@ -32,12 +32,33 @@ from climate_risk.infrastructure.db.modelos import JobORM
 
 logger = logging.getLogger(__name__)
 
+# Limite global de tentativas — usado como rede de segurança se algum
+# caminho chama ``concluir_com_falha`` com retry mas o job já excedeu o
+# limite, e por ``recuperar_zumbis`` para evitar loops de crash infinitos.
+MAX_TENTATIVAS: int = 3
+
 
 class FilaSQLite:
-    """Implementação de :class:`FilaJobs` usando SQLAlchemy async + SQLite."""
+    """Implementação de :class:`FilaJobs` usando SQLAlchemy async + SQLite.
 
-    def __init__(self, sessao: AsyncSession) -> None:
+    Args:
+        sessao: Sessão usada nos caminhos de leitura e nos writes que NÃO
+            competem com a task de heartbeat.
+        sessionmaker: Sessão-factory opcional usada nos caminhos terminais
+            de escrita (``concluir_com_falha``, ``recuperar_zumbis``) para
+            evitar o conflito ``"This session is provisioning a new
+            connection; concurrent operations are not permitted"`` quando
+            o handler do worker quebra com a heartbeat task ainda viva.
+            Quando ``None``, usa-se ``self._sessao`` com rollback prévio.
+    """
+
+    def __init__(
+        self,
+        sessao: AsyncSession,
+        sessionmaker: async_sessionmaker[AsyncSession] | None = None,
+    ) -> None:
         self._sessao = sessao
+        self._sessionmaker = sessionmaker
 
     # ------------------------------------------------------------------
     # Enfileirar
@@ -160,48 +181,109 @@ class FilaSQLite:
         erro: str,
         proxima_tentativa_em: datetime | None,
     ) -> None:
+        """Marca falha. Usa sessão limpa quando ``sessionmaker`` foi configurado.
+
+        Inclui rede de segurança: se ``proxima_tentativa_em`` foi pedido mas
+        o job já excedeu :data:`MAX_TENTATIVAS`, força status ``failed``
+        para evitar loops de re-tentativa.
+        """
         agora_iso = datetime_para_iso(utc_now())
         proxima_iso = datetime_para_iso(proxima_tentativa_em)
 
-        if proxima_tentativa_em is None:
-            # Falha terminal.
+        async def _executar(sessao: AsyncSession) -> None:
+            tentativas_atuais = await self._consultar_tentativas(sessao, job_id)
+            forcar_falha_terminal = (
+                proxima_tentativa_em is not None and tentativas_atuais + 1 >= MAX_TENTATIVAS
+            )
+
+            if proxima_tentativa_em is None or forcar_falha_terminal:
+                stmt = (
+                    update(JobORM)
+                    .where(JobORM.id == job_id)
+                    .values(
+                        status=StatusJob.FAILED,
+                        concluido_em=agora_iso,
+                        erro=erro,
+                        proxima_tentativa_em=None,
+                        tentativas=JobORM.tentativas + 1,
+                    )
+                )
+                await sessao.execute(stmt)
+                await sessao.commit()
+                if forcar_falha_terminal:
+                    logger.warning(
+                        "Job %s atingiu MAX_TENTATIVAS=%d; marcado failed em vez de "
+                        "voltar para pending. Erro: %s",
+                        job_id,
+                        MAX_TENTATIVAS,
+                        erro,
+                    )
+                else:
+                    logger.error("Job %s marcado como failed: %s", job_id, erro)
+                return
+
             stmt = (
                 update(JobORM)
                 .where(JobORM.id == job_id)
                 .values(
-                    status=StatusJob.FAILED,
-                    concluido_em=agora_iso,
+                    status=StatusJob.PENDING,
                     erro=erro,
-                    proxima_tentativa_em=None,
+                    proxima_tentativa_em=proxima_iso,
                     tentativas=JobORM.tentativas + 1,
+                    iniciado_em=None,
+                    heartbeat=None,
                 )
             )
-            await self._sessao.execute(stmt)
-            await self._sessao.commit()
-            logger.error("Job %s marcado como failed: %s", job_id, erro)
+            await sessao.execute(stmt)
+            await sessao.commit()
+            logger.warning(
+                "Job %s voltou para pending após falha (proxima_tentativa=%s): %s",
+                job_id,
+                proxima_iso,
+                erro,
+            )
+
+        await self._executar_em_sessao_limpa(_executar)
+
+    @staticmethod
+    async def _consultar_tentativas(sessao: AsyncSession, job_id: str) -> int:
+        """Lê o contador atual de ``tentativas`` do job.
+
+        Retorna 0 se o job não existe (caminho defensivo — não deveria
+        acontecer em fluxo normal).
+        """
+        stmt = select(JobORM.tentativas).where(JobORM.id == job_id)
+        resultado = await sessao.execute(stmt)
+        valor = resultado.scalar_one_or_none()
+        return int(valor) if valor is not None else 0
+
+    async def _executar_em_sessao_limpa(
+        self,
+        operacao: Any,
+    ) -> None:
+        """Executa ``operacao(sessao)`` numa sessão isolada.
+
+        Se ``sessionmaker`` foi injetado no construtor, abre uma sessão nova
+        para a operação — garantindo isolamento de qualquer transação suja
+        deixada pelo handler ou por ``atualizar_heartbeat`` concorrente.
+
+        Sem ``sessionmaker``, faz ``rollback()`` em ``self._sessao`` antes
+        de executar — descarta qualquer transação aberta sem fechar e
+        previne o erro ``"concurrent operations are not permitted"``.
+        """
+        if self._sessionmaker is not None:
+            async with self._sessionmaker() as sessao:
+                await operacao(sessao)
             return
 
-        # Retry agendado: volta para pending com backoff.
-        stmt = (
-            update(JobORM)
-            .where(JobORM.id == job_id)
-            .values(
-                status=StatusJob.PENDING,
-                erro=erro,
-                proxima_tentativa_em=proxima_iso,
-                tentativas=JobORM.tentativas + 1,
-                iniciado_em=None,
-                heartbeat=None,
+        try:
+            await self._sessao.rollback()
+        except Exception as erro_rollback:
+            logger.warning(
+                "Falha ao fazer rollback antes de write terminal: %s",
+                erro_rollback,
             )
-        )
-        await self._sessao.execute(stmt)
-        await self._sessao.commit()
-        logger.warning(
-            "Job %s voltou para pending após falha (proxima_tentativa=%s): %s",
-            job_id,
-            proxima_iso,
-            erro,
-        )
+        await operacao(self._sessao)
 
     # ------------------------------------------------------------------
     # Cancelar
@@ -229,10 +311,63 @@ class FilaSQLite:
         """Devolve para ``pending`` jobs ``running`` sem heartbeat recente.
 
         ``tentativas`` é incrementado — a morte do worker conta como uma
-        tentativa consumida (evita loops de crash infinitos).
+        tentativa consumida (evita loops de crash infinitos). Zumbis que já
+        atingiriam :data:`MAX_TENTATIVAS` após o incremento são marcados
+        como ``failed`` em vez de voltar para ``pending``.
+
+        Returns:
+            Total de jobs afetados (recuperados para pending **+** marcados
+            failed por exceder o limite).
         """
+        agora_iso = datetime_para_iso(utc_now())
         limite_iso = datetime_para_iso(utc_now() - timedelta(seconds=timeout_segundos))
-        stmt = (
+        assert agora_iso is not None and limite_iso is not None
+
+        if self._sessionmaker is not None:
+            async with self._sessionmaker() as sessao:
+                return await self._aplicar_sweep_zumbis(
+                    sessao, limite_iso, agora_iso, timeout_segundos
+                )
+
+        # Sem sessionmaker: rollback prévio em self._sessao para evitar
+        # "concurrent operations" se a sessão veio de um caminho com erro.
+        try:
+            await self._sessao.rollback()
+        except Exception as erro_rollback:
+            logger.warning(
+                "Falha ao fazer rollback antes de recuperar_zumbis: %s",
+                erro_rollback,
+            )
+        return await self._aplicar_sweep_zumbis(
+            self._sessao, limite_iso, agora_iso, timeout_segundos
+        )
+
+    @staticmethod
+    async def _aplicar_sweep_zumbis(
+        sessao: AsyncSession,
+        limite_iso: str,
+        agora_iso: str,
+        timeout_segundos: int,
+    ) -> int:
+        falha_stmt = (
+            update(JobORM)
+            .where(JobORM.status == StatusJob.RUNNING)
+            .where(JobORM.heartbeat < limite_iso)
+            .where(JobORM.tentativas + 1 >= MAX_TENTATIVAS)
+            .values(
+                status=StatusJob.FAILED,
+                concluido_em=agora_iso,
+                tentativas=JobORM.tentativas + 1,
+                proxima_tentativa_em=None,
+                iniciado_em=None,
+                heartbeat=None,
+                erro="recuperado-por-heartbeat-timeout (limite atingido)",
+            )
+        )
+        res_falha = await sessao.execute(falha_stmt)
+        falhados = int(getattr(res_falha, "rowcount", 0) or 0)
+
+        pending_stmt = (
             update(JobORM)
             .where(JobORM.status == StatusJob.RUNNING)
             .where(JobORM.heartbeat < limite_iso)
@@ -245,16 +380,24 @@ class FilaSQLite:
                 erro="recuperado-por-heartbeat-timeout",
             )
         )
-        resultado = await self._sessao.execute(stmt)
-        await self._sessao.commit()
-        recuperados = int(getattr(resultado, "rowcount", 0) or 0)
+        res_pending = await sessao.execute(pending_stmt)
+        recuperados = int(getattr(res_pending, "rowcount", 0) or 0)
+
+        await sessao.commit()
+
+        if falhados:
+            logger.warning(
+                "%d jobs zumbis marcados FAILED por exceder MAX_TENTATIVAS=%d",
+                falhados,
+                MAX_TENTATIVAS,
+            )
         if recuperados:
             logger.warning(
                 "%d jobs zumbis recuperados (timeout=%ds)",
                 recuperados,
                 timeout_segundos,
             )
-        return int(recuperados)
+        return falhados + recuperados
 
 
 # ---------------------------------------------------------------------

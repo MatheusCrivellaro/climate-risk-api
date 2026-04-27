@@ -35,6 +35,24 @@ Página `/estudo/` opera no modo "lote": aceita 6 pastas e cria 2 execuções
 por submit. Endpoint antigo `/api/execucoes/estresse-hidrico` continua
 existindo para uso programático com arquivo único.
 
+### Memória no leitor multi-variável (Slice 18)
+
+A leitura de pastas com múltiplos `.nc` usa `xr.open_mfdataset` com chunks
+dask (`chunks={"time": 365}`). Materialização em RAM acontece só durante
+agregação espacial, município a município. Não usar `.load()` nem
+`isel(time=ordem)` em DataArrays grandes — força materialização total.
+Ver ADR-010.
+
+### Resiliência da fila de jobs (Slice 18)
+
+Jobs que falham 3 vezes consecutivas são marcados como `failed`
+definitivamente, não retornam para `pending` (constante `MAX_TENTATIVAS`
+em `infrastructure/fila/fila_sqlite.py`). O método `concluir_com_falha`
+usa sessão limpa (via `async_sessionmaker` injetado) para evitar conflito
+com a sessão da task de heartbeat — sem esse fix, falhas geravam o erro
+SQLAlchemy `"This session is provisioning a new connection; concurrent
+operations are not permitted"` e entravam em loop de retry.
+
 ## Convenções
 
 - Arquitetura hexagonal com camadas explícitas (ADR-005): `domain`,
