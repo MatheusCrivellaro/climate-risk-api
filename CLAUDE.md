@@ -89,6 +89,25 @@ execuções pendentes/em execução são reconciliadas com o servidor: 404
 remove silenciosamente, completed/failed atualiza `ultimo_status`,
 pending/running retoma o polling. Limite de 50 execuções no histórico.
 
+### Pipeline streaming (Slice 21)
+
+O agregador yield tuplas sob demanda
+(`AgregadorEspacial.iterar_por_municipio`), evitando construir o
+DataFrame completo em RAM. O handler de estresse hídrico
+(`application/jobs/handlers_estresse_hidrico.py`) consome os 3
+iteradores em paralelo (pr/tas/evap), calcula índices anuais município a
+município e persiste em batches de `BATCH_SIZE = 100`. Logs estruturados
+com `execucao_id`/`municipios_processados` saem a cada
+`LOG_INTERVALO = 100` municípios.
+
+Idempotência: ao iniciar, `RepositorioResultadoEstresseHidrico.deletar_por_execucao`
+remove resultados parciais da execução. Suporta retry sem violar a
+`UniqueConstraint(execucao_id, municipio_id, ano)`. Ver ADR-013.
+
+O método legacy `agregar_por_municipio` permanece para compatibilidade
+com testes e callers existentes — não usar em datasets grandes (estoura
+memória, foi exatamente o motivo desta slice).
+
 ## Convenções
 
 - Arquitetura hexagonal com camadas explícitas (ADR-005): `domain`,
