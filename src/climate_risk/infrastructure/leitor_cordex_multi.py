@@ -47,6 +47,7 @@ __all__ = [
     "_identificar_variavel_principal",
     "_inferir_cenario_arquivo",
     "_normalizar_calendario",
+    "detectar_cenario_no_nome",
 ]
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,21 @@ def _calendario_do_dataarray(da: xr.DataArray) -> str:
     coord = da["time"]
     calendario = coord.encoding.get("calendar") or coord.attrs.get("calendar") or "standard"
     return str(calendario).lower()
+
+
+def detectar_cenario_no_nome(nome: str) -> str | None:
+    """Extrai o cenário CORDEX (``rcp45``/``ssp585``/...) do nome de um arquivo.
+
+    Reusa o regex :data:`_SCENARIO_RE` para casar tanto ``rcpNN`` quanto
+    ``sspNNN``. Devolve a string em minúsculas, ou ``None`` quando o nome
+    não contém um padrão reconhecido. Não abre o arquivo — útil em
+    contextos como o browser de pastas em que abrir o ``.nc`` para ler
+    ``experiment_id`` seria proibitivamente caro.
+    """
+    match = _SCENARIO_RE.search(nome)
+    if match is None:
+        return None
+    return match.group(1).lower()
 
 
 def _inferir_cenario_arquivo(caminho: str, ds: xr.Dataset) -> str:
