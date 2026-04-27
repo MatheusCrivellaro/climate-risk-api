@@ -35,6 +35,18 @@ Página `/estudo/` opera no modo "lote": aceita 6 pastas e cria 2 execuções
 por submit. Endpoint antigo `/api/execucoes/estresse-hidrico` continua
 existindo para uso programático com arquivo único.
 
+### Definição de intensidade (Slice 19)
+
+A partir da Slice 19, `intensidade_mm_dia` representa a **média** do
+déficit hídrico nos dias secos quentes (mm/dia), calculada como
+``soma(deficit nos dias secos quentes) / frequencia_dias_secos_quentes``.
+Quando `frequencia_dias_secos_quentes == 0`, a intensidade é definida
+como `0.0` por convenção (não NaN). A definição anterior (soma total em
+mm) foi descartada — ver ADR-011. A coluna no banco passou a se chamar
+`intensidade_mm_dia` (migration `5c2d8a17b9f4`); a tabela
+`resultado_estresse_hidrico` foi zerada na migração porque os valores
+antigos não eram convertíveis sem recalcular.
+
 ### Memória no leitor multi-variável (Slice 18)
 
 A leitura de pastas com múltiplos `.nc` usa `xr.open_mfdataset` com chunks

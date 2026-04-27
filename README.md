@@ -90,6 +90,14 @@ Consome o endpoint `POST /api/execucoes/estresse-hidrico/em-lote` (Slice 17),
 que aceita pastas em vez de arquivos individuais — todos os `.nc` de cada
 pasta são concatenados temporalmente pelo handler.
 
+A tabela de resultados expõe duas métricas por município/ano:
+
+- **Frequência (dias)** — número de dias secos quentes (`pr ≤ limiar_pr`
+  **e** `tas ≥ limiar_tas`).
+- **Intensidade (mm/dia)** — **média** do déficit hídrico (`evap - pr`)
+  por dia seco quente do ano. Quando a frequência é zero, intensidade
+  vale `0.0` por convenção (Slice 19, ADR-011 — antes era a soma anual).
+
 O endpoint antigo `POST /api/execucoes/estresse-hidrico` (arquivo único)
 continua existindo para uso programático.
 
