@@ -1,12 +1,23 @@
 // Página /estudo/ — JavaScript vanilla.
-// Consome os endpoints /api/execucoes/estresse-hidrico e
-// /api/resultados/estresse-hidrico já existentes.
+// Slice 20.2: abas, modal browser de pastas, validação inline e downloads.
 
 'use strict';
 
-const API_BASE = '/api';
+// ============================================================================
+// Constantes
+// ============================================================================
+
+const API = {
+  FS_LISTAR: '/api/fs/listar',
+  EXECUCOES_EM_LOTE: '/api/execucoes/estresse-hidrico/em-lote',
+  EXECUCAO_GET: (id) => `/api/execucoes/${encodeURIComponent(id)}`,
+  RESULTADOS: '/api/resultados/estresse-hidrico',
+  RESULTADOS_EXPORT: '/api/resultados/estresse-hidrico/export',
+};
+
 const POLLING_INTERVAL_MS = 3000;
-const PAGINA_TAMANHO = 50;
+const PAGE_SIZE = 50;
+const VALIDACAO_DEBOUNCE_MS = 500;
 const STATUSES_FINAIS = new Set(['completed', 'failed', 'canceled']);
 
 const UFS = [
@@ -15,33 +26,31 @@ const UFS = [
   'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO',
 ];
 
+// ============================================================================
+// Estado em memória
+// ============================================================================
+
 const state = {
-  // Slice 17: até dois itens (rcp45 + rcp85), cada um com {cenario, id, jobId, status, erro}
-  execucoesEmLote: [],
+  abaAtiva: 'nova',
+  execucoesAtivas: [],
   pollingTimer: null,
-  paginaAtual: 0,
+  resultados: [],
   totalResultados: 0,
-  filtrosAtivos: {},
+  paginaAtual: 0,
+  filtrosAtuais: {},
+  modalContexto: null,
+  caminhoModalAtual: null,
+  arquivosModalAtual: [],
   grafico: null,
-  scrollFeito: false,
+  resultadosNovosDisponiveis: false,
 };
 
-// -------------------------------------------------------------------------
+// ============================================================================
 // Helpers genéricos
-// -------------------------------------------------------------------------
+// ============================================================================
 
 function qs(id) {
   return document.getElementById(id);
-}
-
-function formatarNumero(valor, casas = 2) {
-  if (valor === null || valor === undefined || Number.isNaN(valor)) {
-    return '—';
-  }
-  return Number(valor).toLocaleString('pt-BR', {
-    minimumFractionDigits: casas,
-    maximumFractionDigits: casas,
-  });
 }
 
 function escapeHtml(valor) {
@@ -54,8 +63,30 @@ function escapeHtml(valor) {
     .replace(/'/g, '&#39;');
 }
 
-async function chamarApi(path, options = {}) {
-  const resposta = await fetch(`${API_BASE}${path}`, {
+function formatarNumero(valor, casas = 2) {
+  if (valor === null || valor === undefined || Number.isNaN(valor)) {
+    return '—';
+  }
+  return Number(valor).toLocaleString('pt-BR', {
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  });
+}
+
+function debounce(fn, ms) {
+  let timer = null;
+  return (...args) => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function limparAspas(valor) {
+  return (valor || '').trim().replace(/^"+|"+$/g, '');
+}
+
+async function chamarApi(url, options = {}) {
+  const resposta = await fetch(url, {
     headers: { Accept: 'application/json', ...(options.headers || {}) },
     ...options,
   });
@@ -73,39 +104,394 @@ async function chamarApi(path, options = {}) {
   return corpo;
 }
 
-// -------------------------------------------------------------------------
-// Seção 1: criar execução + polling
-// -------------------------------------------------------------------------
+// ============================================================================
+// Tabs
+// ============================================================================
 
-function lerPastasDoForm(form, cenario) {
-  // Slice 17: limpeza obrigatória — remove aspas envolventes ("Copiar como
-  // caminho" do Windows) antes de enviar.
-  const limpar = (valor) => valor.trim().replace(/^"+|"+$/g, '');
+function inicializarTabs() {
+  const botoes = document.querySelectorAll('.tab-button');
+  botoes.forEach((botao) => {
+    botao.addEventListener('click', () => trocarAba(botao.dataset.tab));
+    botao.addEventListener('keydown', (e) => onKeyDownTabs(e, botoes, botao));
+  });
+
+  const hash = window.location.hash.replace('#', '');
+  if (hash === 'resultados' || hash === 'nova') {
+    trocarAba(hash, { atualizarHash: false });
+  }
+}
+
+function onKeyDownTabs(event, botoes, atual) {
+  const teclas = {
+    ArrowRight: 1,
+    ArrowLeft: -1,
+  };
+  if (!(event.key in teclas)) return;
+  event.preventDefault();
+  const lista = Array.from(botoes);
+  const indiceAtual = lista.indexOf(atual);
+  const novo = (indiceAtual + teclas[event.key] + lista.length) % lista.length;
+  lista[novo].focus();
+  trocarAba(lista[novo].dataset.tab);
+}
+
+function trocarAba(nome, { atualizarHash = true } = {}) {
+  if (nome !== 'nova' && nome !== 'resultados') return;
+  state.abaAtiva = nome;
+
+  document.querySelectorAll('.tab-button').forEach((botao) => {
+    const ativo = botao.dataset.tab === nome;
+    botao.setAttribute('aria-selected', ativo ? 'true' : 'false');
+    botao.classList.toggle('tab-ativa', ativo);
+    botao.tabIndex = ativo ? 0 : -1;
+  });
+
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.hidden = panel.id !== `tab-${nome}`;
+  });
+
+  if (atualizarHash) {
+    history.replaceState(null, '', `#${nome}`);
+  }
+
+  if (nome === 'resultados' && state.resultadosNovosDisponiveis) {
+    state.resultadosNovosDisponiveis = false;
+    qs('badge-novos-resultados').hidden = true;
+  }
+}
+
+// ============================================================================
+// Modal browser de pastas
+// ============================================================================
+
+function abrirModalPastas(targetInputId) {
+  state.modalContexto = targetInputId;
+  const input = qs(targetInputId);
+  const cenarioEsperado = input ? input.dataset.cenario : null;
+  const titulo = qs('modal-titulo');
+  if (cenarioEsperado) {
+    titulo.textContent = `Selecionar pasta — ${cenarioEsperado}`;
+  } else {
+    titulo.textContent = 'Selecionar pasta';
+  }
+
+  const modal = qs('modal-browser-pastas');
+  if (typeof modal.showModal === 'function') {
+    modal.showModal();
+  } else {
+    modal.setAttribute('open', '');
+  }
+
+  const valorAtual = limparAspas(input ? input.value : '');
+  carregarPasta(valorAtual || null).catch((erro) => {
+    renderizarErroModal(erro.message || 'Erro ao listar pasta.');
+  });
+}
+
+function fecharModal() {
+  const modal = qs('modal-browser-pastas');
+  if (typeof modal.close === 'function') {
+    modal.close();
+  } else {
+    modal.removeAttribute('open');
+  }
+  state.modalContexto = null;
+  state.caminhoModalAtual = null;
+  state.arquivosModalAtual = [];
+}
+
+async function carregarPasta(caminho) {
+  const lista = qs('modal-lista-pastas');
+  lista.innerHTML = '<li class="lista-vazia">Carregando…</li>';
+  qs('modal-cenario-detectado').hidden = true;
+
+  const url = new URL(API.FS_LISTAR, window.location.origin);
+  if (caminho) url.searchParams.set('caminho', caminho);
+
+  let resposta;
+  try {
+    resposta = await chamarApi(url.toString());
+  } catch (erro) {
+    if (caminho) {
+      // Fallback: caminho inválido → carrega raiz
+      return carregarPasta(null);
+    }
+    throw erro;
+  }
+
+  state.caminhoModalAtual = resposta.caminho_atual;
+  state.arquivosModalAtual = resposta.arquivos_nc || [];
+
+  renderizarBreadcrumb(resposta);
+  renderizarConteudoPasta(resposta);
+  renderizarCenarioDetectado(resposta);
+}
+
+function renderizarBreadcrumb(resposta) {
+  const breadcrumb = qs('modal-breadcrumb');
+  const partes = [];
+
+  partes.push(
+    `<button type="button" data-caminho="${escapeHtml(resposta.pasta_raiz)}">📂 raiz</button>`,
+  );
+
+  const relativo = resposta.caminho_relativo_raiz;
+  if (relativo && relativo !== '.') {
+    const segmentos = relativo.split(/[\\/]/).filter(Boolean);
+    let acumulado = resposta.pasta_raiz;
+    const sep = resposta.pasta_raiz.includes('\\') ? '\\' : '/';
+    segmentos.forEach((seg, i) => {
+      acumulado = `${acumulado}${sep}${seg}`;
+      partes.push('<span class="breadcrumb-separator">/</span>');
+      if (i === segmentos.length - 1) {
+        partes.push(`<span class="breadcrumb-atual">${escapeHtml(seg)}</span>`);
+      } else {
+        partes.push(
+          `<button type="button" data-caminho="${escapeHtml(acumulado)}">${escapeHtml(seg)}</button>`,
+        );
+      }
+    });
+  }
+
+  breadcrumb.innerHTML = partes.join('');
+  breadcrumb.querySelectorAll('button[data-caminho]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      carregarPasta(btn.dataset.caminho).catch((erro) =>
+        renderizarErroModal(erro.message),
+      );
+    });
+  });
+}
+
+function renderizarConteudoPasta(resposta) {
+  const lista = qs('modal-lista-pastas');
+  const items = [];
+
+  if (resposta.pode_subir && resposta.pasta_pai) {
+    items.push({
+      tipo: 'pai',
+      caminho: resposta.pasta_pai,
+      nome: '..',
+    });
+  }
+
+  for (const sub of resposta.subpastas || []) {
+    items.push({
+      tipo: 'pasta',
+      caminho: sub.caminho_absoluto,
+      nome: sub.nome,
+      meta: `${sub.quantidade_nc} .nc`,
+    });
+  }
+
+  for (const arq of resposta.arquivos_nc || []) {
+    items.push({
+      tipo: 'arquivo',
+      nome: arq.nome,
+      cenario: arq.cenario_detectado,
+    });
+  }
+
+  if (items.length === 0) {
+    lista.innerHTML = '<li class="lista-vazia">Pasta vazia.</li>';
+    return;
+  }
+
+  const html = items
+    .map((item) => {
+      if (item.tipo === 'pai') {
+        return `
+          <li tabindex="0" data-caminho="${escapeHtml(item.caminho)}" data-tipo="pasta">
+            <span class="item-icone" aria-hidden="true">⬆️</span>
+            <span class="item-nome">${escapeHtml(item.nome)}</span>
+            <span class="item-meta">subir</span>
+          </li>
+        `;
+      }
+      if (item.tipo === 'pasta') {
+        return `
+          <li tabindex="0" data-caminho="${escapeHtml(item.caminho)}" data-tipo="pasta">
+            <span class="item-icone" aria-hidden="true">📁</span>
+            <span class="item-nome">${escapeHtml(item.nome)}</span>
+            <span class="item-meta">${escapeHtml(item.meta)}</span>
+          </li>
+        `;
+      }
+      return `
+        <li class="item-arquivo">
+          <span class="item-icone" aria-hidden="true">📄</span>
+          <span class="item-nome">${escapeHtml(item.nome)}</span>
+          ${item.cenario ? `<span class="item-meta">${escapeHtml(item.cenario)}</span>` : ''}
+        </li>
+      `;
+    })
+    .join('');
+  lista.innerHTML = html;
+
+  lista.querySelectorAll('li[data-tipo="pasta"]').forEach((li) => {
+    const navegar = () => {
+      carregarPasta(li.dataset.caminho).catch((erro) =>
+        renderizarErroModal(erro.message),
+      );
+    };
+    li.addEventListener('click', navegar);
+    li.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        navegar();
+      }
+    });
+  });
+}
+
+function renderizarCenarioDetectado(resposta) {
+  const div = qs('modal-cenario-detectado');
+  const arquivos = resposta.arquivos_nc || [];
+  const cenarioEsperado = state.modalContexto
+    ? qs(state.modalContexto)?.dataset.cenario
+    : null;
+
+  if (arquivos.length === 0) {
+    div.hidden = true;
+    return;
+  }
+
+  const cenarios = arquivos
+    .map((a) => a.cenario_detectado)
+    .filter((c) => c);
+  const cenariosUnicos = [...new Set(cenarios)];
+
+  div.hidden = false;
+  if (cenariosUnicos.length === 0) {
+    div.className = 'cenario-detectado cenario-info';
+    div.innerHTML = `<span aria-hidden="true">ℹ️</span> ${arquivos.length} arquivos .nc (cenário não detectado)`;
+    return;
+  }
+
+  if (cenarioEsperado && !cenariosUnicos.includes(cenarioEsperado)) {
+    div.className = 'cenario-detectado cenario-aviso';
+    div.innerHTML = `<span aria-hidden="true">⚠️</span> ${arquivos.length} arquivos detectados como ${cenariosUnicos.join(', ')} — esperado ${escapeHtml(cenarioEsperado)}`;
+    return;
+  }
+
+  div.className = 'cenario-detectado cenario-ok';
+  const rotulo = cenariosUnicos.length === 1 ? cenariosUnicos[0] : cenariosUnicos.join(', ');
+  div.innerHTML = `<span aria-hidden="true">✓</span> ${arquivos.length} arquivos ${escapeHtml(rotulo)}`;
+}
+
+function renderizarErroModal(mensagem) {
+  const lista = qs('modal-lista-pastas');
+  lista.innerHTML = `<li class="lista-vazia">${escapeHtml(mensagem)}</li>`;
+  qs('modal-cenario-detectado').hidden = true;
+}
+
+function selecionarPastaAtual() {
+  if (!state.modalContexto || !state.caminhoModalAtual) {
+    fecharModal();
+    return;
+  }
+  const input = qs(state.modalContexto);
+  if (input) {
+    input.value = state.caminhoModalAtual;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    validarPastaDebounced(input);
+  }
+  fecharModal();
+}
+
+// ============================================================================
+// Validação inline de pastas
+// ============================================================================
+
+function definirFeedback(input, classe, mensagem) {
+  const feedback = qs(`feedback-${input.id}`);
+  if (!feedback) return;
+  input.classList.remove('input-ok', 'input-aviso', 'input-erro');
+  feedback.classList.remove('feedback-ok', 'feedback-aviso', 'feedback-erro');
+  if (!classe) {
+    feedback.textContent = '';
+    return;
+  }
+  input.classList.add(`input-${classe}`);
+  feedback.classList.add(`feedback-${classe}`);
+  feedback.textContent = mensagem;
+}
+
+const validarPastaDebounced = debounce(async (input) => {
+  const valor = limparAspas(input.value);
+  if (!valor) {
+    definirFeedback(input, null, '');
+    return;
+  }
+  const url = new URL(API.FS_LISTAR, window.location.origin);
+  url.searchParams.set('caminho', valor);
+  try {
+    const resposta = await chamarApi(url.toString());
+    const arquivos = resposta.arquivos_nc || [];
+    const cenarioEsperado = input.dataset.cenario;
+    if (arquivos.length === 0) {
+      definirFeedback(input, 'aviso', '⚠ Nenhum arquivo .nc na pasta');
+      return;
+    }
+    const cenarios = arquivos.map((a) => a.cenario_detectado).filter((c) => c);
+    const cenariosUnicos = [...new Set(cenarios)];
+    if (cenariosUnicos.length === 0) {
+      definirFeedback(
+        input,
+        'ok',
+        `✓ ${arquivos.length} arquivo(s) .nc encontrado(s)`,
+      );
+      return;
+    }
+    if (cenarioEsperado && !cenariosUnicos.includes(cenarioEsperado)) {
+      definirFeedback(
+        input,
+        'aviso',
+        `⚠ Detectado ${cenariosUnicos.join(', ')} — esperado ${cenarioEsperado}`,
+      );
+      return;
+    }
+    definirFeedback(
+      input,
+      'ok',
+      `✓ ${arquivos.length} arquivo(s) ${cenariosUnicos.join(', ')}`,
+    );
+  } catch (erro) {
+    const msg = erro.message || 'Pasta inválida';
+    definirFeedback(input, 'erro', `✗ ${msg}`);
+  }
+}, VALIDACAO_DEBOUNCE_MS);
+
+// ============================================================================
+// Submit do formulário (criar execuções em lote)
+// ============================================================================
+
+function lerPastasDoForm(cenario) {
   return {
-    pasta_pr: limpar(form.elements[`${cenario}-pasta-pr`].value),
-    pasta_tas: limpar(form.elements[`${cenario}-pasta-tas`].value),
-    pasta_evap: limpar(form.elements[`${cenario}-pasta-evap`].value),
+    pasta_pr: limparAspas(qs(`${cenario}-pasta-pr`).value),
+    pasta_tas: limparAspas(qs(`${cenario}-pasta-tas`).value),
+    pasta_evap: limparAspas(qs(`${cenario}-pasta-evap`).value),
   };
 }
 
-async function criarExecucao(event) {
+async function criarExecucoes(event) {
   event.preventDefault();
   pararPolling();
 
   const feedback = qs('feedback-criar');
-  feedback.className = 'feedback';
+  feedback.className = 'feedback-form';
   feedback.textContent = '';
 
-  const form = event.currentTarget;
-  const rcp45 = lerPastasDoForm(form, 'rcp45');
-  const rcp85 = lerPastasDoForm(form, 'rcp85');
+  const rcp45 = lerPastasDoForm('rcp45');
+  const rcp85 = lerPastasDoForm('rcp85');
 
   const todas = [
     rcp45.pasta_pr, rcp45.pasta_tas, rcp45.pasta_evap,
     rcp85.pasta_pr, rcp85.pasta_tas, rcp85.pasta_evap,
   ];
   if (todas.some((v) => !v)) {
-    mostrarFeedbackErro('Informe as 6 pastas (3 variáveis × 2 cenários).');
+    feedback.className = 'feedback-form feedback-erro';
+    feedback.textContent = 'Informe as 6 pastas (3 variáveis × 2 cenários).';
     return;
   }
 
@@ -113,80 +499,81 @@ async function criarExecucao(event) {
     rcp45,
     rcp85,
     parametros: {
-      limiar_pr_mm_dia: Number(form.limiar_pr_mm_dia.value),
-      limiar_tas_c: Number(form.limiar_tas_c.value),
+      limiar_pr_mm_dia: Number(qs('limiar-pr').value),
+      limiar_tas_c: Number(qs('limiar-tas').value),
     },
   };
 
   const botao = qs('btn-criar');
   botao.disabled = true;
-  botao.textContent = 'Criando...';
+  botao.textContent = 'Criando…';
 
   try {
-    const resposta = await chamarApi('/execucoes/estresse-hidrico/em-lote', {
+    const resposta = await chamarApi(API.EXECUCOES_EM_LOTE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados),
     });
-    state.execucoesEmLote = (resposta.execucoes || []).map((item) => ({
+    state.execucoesAtivas = (resposta.execucoes || []).map((item) => ({
       cenario: item.cenario,
       id: item.execucao_id || null,
       jobId: item.job_id || null,
       status: item.status || (item.erro ? 'failed' : 'pending'),
       erro: item.erro || null,
     }));
-    state.scrollFeito = false;
-    renderizarFeedbackExecucao();
+    renderizarStatusExecucoes();
     iniciarPolling();
   } catch (erro) {
-    mostrarFeedbackErro(erro.message || 'Falha ao criar execuções.');
+    feedback.className = 'feedback-form feedback-erro';
+    feedback.textContent = erro.message || 'Falha ao criar execuções.';
   } finally {
     botao.disabled = false;
     botao.textContent = 'Criar execuções';
   }
 }
 
-function mostrarFeedbackErro(mensagem) {
-  const feedback = qs('feedback-criar');
-  feedback.className = 'feedback feedback-erro';
-  feedback.textContent = mensagem;
-}
-
-function renderizarFeedbackExecucao() {
-  const feedback = qs('feedback-criar');
-  if (state.execucoesEmLote.length === 0) {
-    feedback.className = 'feedback';
-    feedback.textContent = '';
+function renderizarStatusExecucoes() {
+  const secao = qs('status-execucoes');
+  const cards = qs('cards-status');
+  if (state.execucoesAtivas.length === 0) {
+    secao.hidden = true;
+    cards.innerHTML = '';
     return;
   }
-  feedback.className = 'feedback feedback-info';
-  const linhas = state.execucoesEmLote.map((exec) => {
-    const rotulo = `<span class="execucao-rotulo rotulo-${escapeHtml(exec.cenario)}">${escapeHtml(exec.cenario)}</span>`;
-    if (exec.erro) {
+  secao.hidden = false;
+  const html = state.execucoesAtivas
+    .map((exec) => {
+      const rotulo = `<span class="cenario-rotulo rotulo-${escapeHtml(exec.cenario)}">${escapeHtml(exec.cenario)}</span>`;
+      if (exec.erro) {
+        return `
+          <div class="card-status card-status-erro">
+            ${rotulo}
+            <span>Falha: ${escapeHtml(exec.erro)}</span>
+          </div>
+        `;
+      }
+      const idCurto = exec.id ? `<code>${escapeHtml(exec.id)}</code>` : '';
+      const status = exec.status || 'pending';
       return `
-        <div class="execucao-em-lote execucao-erro">
+        <div class="card-status">
           ${rotulo}
-          <span>Falha: ${escapeHtml(exec.erro)}</span>
+          ${idCurto}
+          <span class="status-badge status-${escapeHtml(status)}">${escapeHtml(status)}</span>
         </div>
       `;
-    }
-    const idCurto = exec.id ? `<code>${escapeHtml(exec.id)}</code>` : '';
-    const status = exec.status || 'pending';
-    return `
-      <div class="execucao-em-lote">
-        ${rotulo}
-        ${idCurto}
-        <span class="status-badge status-${escapeHtml(status)}">${escapeHtml(status)}</span>
-      </div>
-    `;
-  });
-  feedback.innerHTML = `<div class="execucoes-em-lote">${linhas.join('')}</div>`;
+    })
+    .join('');
+  cards.innerHTML = html;
 }
+
+// ============================================================================
+// Polling
+// ============================================================================
 
 function iniciarPolling() {
   pararPolling();
   if (todasFinalizadas()) {
-    talvezScrollarParaResultados();
+    onExecucoesFinalizadas();
     return;
   }
   state.pollingTimer = setInterval(atualizarStatusExecucoes, POLLING_INTERVAL_MS);
@@ -200,34 +587,32 @@ function pararPolling() {
 }
 
 function todasFinalizadas() {
-  if (state.execucoesEmLote.length === 0) return false;
-  return state.execucoesEmLote.every(
+  if (state.execucoesAtivas.length === 0) return false;
+  return state.execucoesAtivas.every(
     (exec) => exec.erro || STATUSES_FINAIS.has(exec.status),
   );
 }
 
 async function atualizarStatusExecucoes() {
-  const pendentes = state.execucoesEmLote.filter(
+  const pendentes = state.execucoesAtivas.filter(
     (exec) => exec.id && !exec.erro && !STATUSES_FINAIS.has(exec.status),
   );
   if (pendentes.length === 0) {
     pararPolling();
-    talvezScrollarParaResultados();
+    onExecucoesFinalizadas();
     return;
   }
   await Promise.all(pendentes.map((exec) => atualizarStatusUmaExecucao(exec)));
-  renderizarFeedbackExecucao();
+  renderizarStatusExecucoes();
   if (todasFinalizadas()) {
     pararPolling();
-    talvezScrollarParaResultados();
+    onExecucoesFinalizadas();
   }
 }
 
 async function atualizarStatusUmaExecucao(exec) {
   try {
-    const resposta = await chamarApi(
-      `/execucoes/${encodeURIComponent(exec.id)}`,
-    );
+    const resposta = await chamarApi(API.EXECUCAO_GET(exec.id));
     exec.status = resposta.status;
   } catch (erro) {
     exec.erro = erro.message || String(erro);
@@ -235,24 +620,27 @@ async function atualizarStatusUmaExecucao(exec) {
   }
 }
 
-function talvezScrollarParaResultados() {
-  if (state.scrollFeito) return;
-  state.scrollFeito = true;
-  qs('resultados-titulo').scrollIntoView({ behavior: 'smooth', block: 'start' });
+function onExecucoesFinalizadas() {
+  const algumaCompletou = state.execucoesAtivas.some(
+    (exec) => exec.status === 'completed',
+  );
+  if (algumaCompletou && state.abaAtiva !== 'resultados') {
+    state.resultadosNovosDisponiveis = true;
+    qs('badge-novos-resultados').hidden = false;
+  }
 }
 
-// -------------------------------------------------------------------------
-// Seção 2: consultar resultados
-// -------------------------------------------------------------------------
+// ============================================================================
+// Resultados
+// ============================================================================
 
 function lerFiltrosDoForm() {
+  const filtros = {};
   const execucao = qs('filtro-execucao').value.trim();
   const cenario = qs('filtro-cenario').value;
   const anoMin = qs('filtro-ano-min').value.trim();
   const anoMax = qs('filtro-ano-max').value.trim();
   const uf = qs('filtro-uf').value;
-
-  const filtros = {};
   if (execucao) filtros.execucao_id = execucao;
   if (cenario) filtros.cenario = cenario;
   if (anoMin) filtros.ano_min = Number(anoMin);
@@ -271,33 +659,31 @@ function montarQueryString(filtros, extras) {
   for (const [chave, valor] of Object.entries(extras || {})) {
     params.set(chave, String(valor));
   }
-  const qs = params.toString();
-  return qs ? `?${qs}` : '';
-}
-
-async function submeterBusca(event) {
-  event.preventDefault();
-  state.paginaAtual = 0;
-  state.filtrosAtivos = lerFiltrosDoForm();
-  await buscarResultados();
+  const str = params.toString();
+  return str ? `?${str}` : '';
 }
 
 async function buscarResultados() {
+  state.filtrosAtuais = lerFiltrosDoForm();
+  state.paginaAtual = 0;
+  await carregarPagina();
+}
+
+async function carregarPagina() {
   const contador = qs('contador-resultados');
-  contador.textContent = 'Carregando...';
+  contador.textContent = 'Carregando…';
   const tbody = qs('tbody-resultados');
   tbody.innerHTML = '';
 
-  const queryString = montarQueryString(state.filtrosAtivos, {
-    limit: PAGINA_TAMANHO,
-    offset: state.paginaAtual * PAGINA_TAMANHO,
+  const queryString = montarQueryString(state.filtrosAtuais, {
+    limit: PAGE_SIZE,
+    offset: state.paginaAtual * PAGE_SIZE,
   });
 
   try {
-    const resposta = await chamarApi(
-      `/resultados/estresse-hidrico${queryString}`,
-    );
+    const resposta = await chamarApi(`${API.RESULTADOS}${queryString}`);
     state.totalResultados = resposta.total;
+    state.resultados = resposta.items;
     renderizarTabela(resposta.items);
     atualizarContador(resposta);
     atualizarPaginacao(resposta);
@@ -336,11 +722,7 @@ function renderizarTabela(items) {
 
 function renderizarErroNaTabela(mensagem) {
   const tbody = qs('tbody-resultados');
-  tbody.innerHTML = `
-    <tr class="linha-vazia">
-      <td colspan="6">${escapeHtml(mensagem)}</td>
-    </tr>
-  `;
+  tbody.innerHTML = `<tr class="linha-vazia"><td colspan="6">${escapeHtml(mensagem)}</td></tr>`;
 }
 
 function atualizarContador(resposta) {
@@ -351,25 +733,32 @@ function atualizarContador(resposta) {
   }
   const inicio = resposta.offset + 1;
   const fim = Math.min(resposta.offset + resposta.items.length, resposta.total);
-  contador.textContent = `Mostrando ${inicio}–${fim} de ${resposta.total} resultados`;
+  contador.textContent = `Mostrando ${inicio}–${fim} de ${resposta.total}`;
 }
 
 function atualizarPaginacao(resposta) {
-  const anterior = qs('btn-anterior');
-  const proxima = qs('btn-proxima');
+  const anterior = qs('btn-pag-anterior');
+  const proxima = qs('btn-pag-proxima');
   anterior.disabled = resposta.offset === 0;
   proxima.disabled = resposta.offset + resposta.items.length >= resposta.total;
+  const info = qs('info-paginacao');
+  if (resposta.total === 0) {
+    info.textContent = '';
+    return;
+  }
+  const totalPaginas = Math.max(1, Math.ceil(resposta.total / PAGE_SIZE));
+  info.textContent = `Página ${state.paginaAtual + 1} de ${totalPaginas}`;
 }
 
 function paginaAnterior() {
   if (state.paginaAtual === 0) return;
   state.paginaAtual -= 1;
-  buscarResultados();
+  carregarPagina();
 }
 
 function paginaProxima() {
   state.paginaAtual += 1;
-  buscarResultados();
+  carregarPagina();
 }
 
 function limparFiltros() {
@@ -378,41 +767,39 @@ function limparFiltros() {
   qs('filtro-ano-min').value = '';
   qs('filtro-ano-max').value = '';
   qs('filtro-uf').value = '';
-  state.filtrosAtivos = {};
+  state.filtrosAtuais = {};
   state.paginaAtual = 0;
   qs('tbody-resultados').innerHTML = `
     <tr class="linha-vazia">
       <td colspan="6">Ajuste os filtros e clique em "Buscar" para carregar resultados.</td>
     </tr>
   `;
-  qs('contador-resultados').textContent = '';
-  qs('btn-anterior').disabled = true;
-  qs('btn-proxima').disabled = true;
+  qs('contador-resultados').textContent = 'Nenhum resultado carregado';
+  qs('btn-pag-anterior').disabled = true;
+  qs('btn-pag-proxima').disabled = true;
+  qs('info-paginacao').textContent = '';
   destruirGrafico();
 }
 
-// -------------------------------------------------------------------------
+// ============================================================================
 // Gráfico (Chart.js)
-// -------------------------------------------------------------------------
+// ============================================================================
 
 function renderizarGrafico(items) {
-  const filtros = state.filtrosAtivos;
-  const wrapper = qs('grafico-wrapper');
+  const filtros = state.filtrosAtuais;
+  const wrapper = qs('grafico-frequencia-anual');
   if (!filtros.ano_min || !filtros.ano_max || !items || items.length === 0) {
     destruirGrafico();
     return;
   }
   const porAno = new Map();
   for (const item of items) {
-    const registro = porAno.get(item.ano);
-    if (registro) {
-      registro.soma += item.frequencia_dias_secos_quentes;
-      registro.n += 1;
+    const reg = porAno.get(item.ano);
+    if (reg) {
+      reg.soma += item.frequencia_dias_secos_quentes;
+      reg.n += 1;
     } else {
-      porAno.set(item.ano, {
-        soma: item.frequencia_dias_secos_quentes,
-        n: 1,
-      });
+      porAno.set(item.ano, { soma: item.frequencia_dias_secos_quentes, n: 1 });
     }
   }
   const anos = Array.from(porAno.keys()).sort((a, b) => a - b);
@@ -426,7 +813,7 @@ function renderizarGrafico(items) {
   });
 
   wrapper.hidden = false;
-  const canvas = qs('grafico-anos');
+  const canvas = qs('canvas-grafico');
   if (state.grafico) {
     state.grafico.data.labels = anos;
     state.grafico.data.datasets[0].data = dados;
@@ -434,7 +821,6 @@ function renderizarGrafico(items) {
     return;
   }
   if (typeof Chart === 'undefined') {
-    // CDN indisponível; esconde o bloco silenciosamente.
     wrapper.hidden = true;
     return;
   }
@@ -456,29 +842,43 @@ function renderizarGrafico(items) {
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: true, position: 'bottom' },
-      },
-      scales: {
-        y: { beginAtZero: true },
-      },
+      plugins: { legend: { display: true, position: 'bottom' } },
+      scales: { y: { beginAtZero: true } },
     },
   });
 }
 
 function destruirGrafico() {
-  qs('grafico-wrapper').hidden = true;
+  qs('grafico-frequencia-anual').hidden = true;
   if (state.grafico) {
     state.grafico.destroy();
     state.grafico = null;
   }
 }
 
-// -------------------------------------------------------------------------
-// Boot
-// -------------------------------------------------------------------------
+// ============================================================================
+// Downloads
+// ============================================================================
 
-function popularSelectUf() {
+function baixar(formato) {
+  const params = new URLSearchParams();
+  params.set('formato', formato);
+  const baixarTudo = qs('export-tudo').checked;
+  if (!baixarTudo) {
+    Object.entries(state.filtrosAtuais).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) {
+        params.set(k, String(v));
+      }
+    });
+  }
+  window.location.href = `${API.RESULTADOS_EXPORT}?${params}`;
+}
+
+// ============================================================================
+// Boot
+// ============================================================================
+
+function popularSelectUFs() {
   const select = qs('filtro-uf');
   for (const uf of UFS) {
     const opt = document.createElement('option');
@@ -488,15 +888,43 @@ function popularSelectUf() {
   }
 }
 
-function registrarEventos() {
-  qs('form-execucao').addEventListener('submit', criarExecucao);
-  qs('form-filtros').addEventListener('submit', submeterBusca);
-  qs('btn-limpar').addEventListener('click', limparFiltros);
-  qs('btn-anterior').addEventListener('click', paginaAnterior);
-  qs('btn-proxima').addEventListener('click', paginaProxima);
+function ligarEventListeners() {
+  qs('form-criar-execucoes').addEventListener('submit', criarExecucoes);
+
+  document.querySelectorAll('.btn-procurar').forEach((btn) => {
+    btn.addEventListener('click', () => abrirModalPastas(btn.dataset.target));
+  });
+
+  document.querySelectorAll('input[data-cenario][data-variavel]').forEach((input) => {
+    input.addEventListener('input', () => validarPastaDebounced(input));
+    input.addEventListener('blur', () => validarPastaDebounced(input));
+  });
+
+  qs('modal-btn-fechar').addEventListener('click', fecharModal);
+  qs('modal-btn-cancelar').addEventListener('click', fecharModal);
+  qs('modal-btn-selecionar').addEventListener('click', selecionarPastaAtual);
+  qs('modal-browser-pastas').addEventListener('close', () => {
+    state.modalContexto = null;
+    state.caminhoModalAtual = null;
+  });
+  qs('modal-browser-pastas').addEventListener('click', (event) => {
+    if (event.target === qs('modal-browser-pastas')) {
+      fecharModal();
+    }
+  });
+
+  qs('btn-buscar').addEventListener('click', buscarResultados);
+  qs('btn-limpar-filtros').addEventListener('click', limparFiltros);
+  qs('btn-pag-anterior').addEventListener('click', paginaAnterior);
+  qs('btn-pag-proxima').addEventListener('click', paginaProxima);
+
+  document.querySelectorAll('.btn-export').forEach((btn) => {
+    btn.addEventListener('click', () => baixar(btn.dataset.formato));
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  popularSelectUf();
-  registrarEventos();
+  inicializarTabs();
+  popularSelectUFs();
+  ligarEventListeners();
 });
