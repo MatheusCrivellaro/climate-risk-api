@@ -181,14 +181,16 @@ async def test_handler_pipeline_completo_persiste_resultados() -> None:
     assert sp.ano == 2026
     assert sp.cenario == "rcp45"
     assert sp.frequencia_dias_secos_quentes == 5
-    # Intensidade = soma de (evap - pr) nos 5 dias:
-    # (3.0-0.0)+(2.5-0.0)+(2.0-0.5)+(4.0-0.0)+(3.5-0.2) = 14.3
-    assert sp.intensidade_mm == pytest.approx(14.3)
+    # Slice 19: intensidade = média (mm/dia) dos déficits nos 5 dias secos quentes.
+    # déficits: (3.0-0.0)+(2.5-0.0)+(2.0-0.5)+(4.0-0.0)+(3.5-0.2) = 14.3
+    # média: 14.3 / 5 = 2.86
+    assert sp.intensidade_mm_dia == pytest.approx(14.3 / 5)
 
     # Rio (3304557): zero dias secos quentes (nem seco, nem quente).
     rj = next(r for r in repo_resultados.salvos if r.municipio_id == 3304557)
     assert rj.frequencia_dias_secos_quentes == 0
-    assert rj.intensidade_mm == 0.0
+    # Convenção: frequência zero ⇒ intensidade 0.0.
+    assert rj.intensidade_mm_dia == 0.0
 
     # Transições: pending → running → completed
     assert repo_execucoes.transicoes == [

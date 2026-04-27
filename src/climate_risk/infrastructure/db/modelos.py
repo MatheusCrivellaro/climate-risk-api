@@ -158,7 +158,7 @@ class ResultadoEstresseHidricoORM(Base):
     ano: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     cenario: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     frequencia_dias_secos_quentes: Mapped[int] = mapped_column(Integer, nullable=False)
-    intensidade_mm: Mapped[float] = mapped_column(Float, nullable=False)
+    intensidade_mm_dia: Mapped[float] = mapped_column(Float, nullable=False)
     criado_em: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (

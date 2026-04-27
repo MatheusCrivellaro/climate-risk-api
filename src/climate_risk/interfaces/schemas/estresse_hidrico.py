@@ -139,7 +139,7 @@ class ResultadoEstresseHidricoSchema(BaseModel):
     ano: int
     cenario: str
     frequencia_dias_secos_quentes: int
-    intensidade_mm: float
+    intensidade_mm_dia: float
     nome_municipio: str | None = None
     uf: str | None = None
 

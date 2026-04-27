@@ -69,7 +69,7 @@ def _mk(
         ano=ano,
         cenario=cenario,
         frequencia_dias_secos_quentes=freq,
-        intensidade_mm=intens,
+        intensidade_mm_dia=intens,
         criado_em=datetime(2026, 4, 24, tzinfo=UTC),
     )
 

@@ -196,7 +196,7 @@ async def listar_resultados_estresse_hidrico(
             ano=r.ano,
             cenario=r.cenario,
             frequencia_dias_secos_quentes=r.frequencia_dias_secos_quentes,
-            intensidade_mm=r.intensidade_mm,
+            intensidade_mm_dia=r.intensidade_mm_dia,
             nome_municipio=nome,
             uf=uf_mun,
         )
