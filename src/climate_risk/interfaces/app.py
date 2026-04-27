@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from climate_risk.core.config import get_settings
@@ -28,22 +27,9 @@ from climate_risk.interfaces.rotas import (
 
 VERSAO_API = "0.0.1"
 
-# Caminho esperado para o build do frontend (`frontend/dist/`).
-# `app.py` está em `src/climate_risk/interfaces/`, então subir 3 níveis
-# leva à raiz do repositório.
-FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
-
 # Página "estudo" — interface HTML/CSS/JS puro focada no pipeline de
-# estresse hídrico. Convive em paralelo com o frontend React em /app/.
+# estresse hídrico. A partir da Slice 20 é a única interface visível.
 ESTUDO_DIR = Path(__file__).resolve().parents[3] / "estudo"
-
-FRONTEND_NAO_BUILDADO_HTML = (
-    "<h1>Frontend não disponível</h1>"
-    "<p>Build do frontend não encontrado em <code>frontend/dist/</code>.</p>"
-    "<p>Rode <code>cd frontend && pnpm install && pnpm build</code> e reinicie o servidor.</p>"
-    "<p>Durante desenvolvimento, prefira <code>pnpm dev</code> em "
-    "<a href='http://localhost:5173'>localhost:5173</a>.</p>"
-)
 
 
 def create_app() -> FastAPI:
@@ -80,7 +66,16 @@ def create_app() -> FastAPI:
     app.include_router(api)
 
     _montar_estudo(app)
-    _montar_frontend(app)
+
+    # ========================================================================
+    # Frontend React desativado a partir da Slice 20.
+    # A interface principal agora é /estudo/ (HTML/CSS/JS puro).
+    # Para reativar o /app/, descomentar as linhas abaixo:
+    # ------------------------------------------------------------------------
+    # _frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+    # if _frontend_dist.exists():
+    #     app.mount("/app", StaticFiles(directory=_frontend_dist, html=True), name="app")
+    # ========================================================================
 
     return app
 
@@ -88,10 +83,8 @@ def create_app() -> FastAPI:
 def _montar_estudo(app: FastAPI) -> None:
     """Monta a página ``/estudo/`` (HTML/CSS/JS puro) quando o diretório existe.
 
-    ``html=True`` faz o StaticFiles servir ``index.html`` automaticamente ao
-    acessar ``/estudo/`` (com ou sem barra). O mount é registrado **antes**
-    do frontend React para garantir que ``/estudo/*`` não colida com o
-    catch-all de ``/app/``.
+    ``html=True`` faz o StaticFiles servir ``index.html`` automaticamente
+    ao acessar ``/estudo/`` (com ou sem barra).
     """
     if ESTUDO_DIR.exists():
         app.mount(
@@ -99,32 +92,6 @@ def _montar_estudo(app: FastAPI) -> None:
             StaticFiles(directory=ESTUDO_DIR, html=True),
             name="estudo",
         )
-
-
-def _montar_frontend(app: FastAPI) -> None:
-    """Monta o build do frontend em ``/app/`` quando disponível.
-
-    Em modo dev o frontend roda via ``pnpm dev`` (Vite) em outra porta
-    e o build não existe — servimos uma mensagem 503 explicativa.
-    """
-    if FRONTEND_DIST.exists():
-        app.mount(
-            "/app/assets",
-            StaticFiles(directory=FRONTEND_DIST / "assets"),
-            name="frontend-assets",
-        )
-        index_html = FRONTEND_DIST / "index.html"
-
-        @app.get("/app", include_in_schema=False)
-        @app.get("/app/{full_path:path}", include_in_schema=False)
-        async def servir_frontend(full_path: str = "") -> FileResponse:
-            return FileResponse(index_html)
-    else:
-
-        @app.get("/app", include_in_schema=False)
-        @app.get("/app/{full_path:path}", include_in_schema=False)
-        async def frontend_nao_buildado(full_path: str = "") -> HTMLResponse:
-            return HTMLResponse(status_code=503, content=FRONTEND_NAO_BUILDADO_HTML)
 
 
 app = create_app()
