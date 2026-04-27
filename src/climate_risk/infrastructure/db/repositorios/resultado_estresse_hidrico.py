@@ -43,7 +43,7 @@ class SQLAlchemyRepositorioResultadoEstresseHidrico:
             ano=orm.ano,
             cenario=orm.cenario,
             frequencia_dias_secos_quentes=orm.frequencia_dias_secos_quentes,
-            intensidade_mm=orm.intensidade_mm,
+            intensidade_mm_dia=orm.intensidade_mm_dia,
             criado_em=criado_em,
         )
 
@@ -58,7 +58,7 @@ class SQLAlchemyRepositorioResultadoEstresseHidrico:
             ano=entidade.ano,
             cenario=entidade.cenario,
             frequencia_dias_secos_quentes=entidade.frequencia_dias_secos_quentes,
-            intensidade_mm=entidade.intensidade_mm,
+            intensidade_mm_dia=entidade.intensidade_mm_dia,
             criado_em=criado_em_iso,
         )
 

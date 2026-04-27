@@ -269,7 +269,7 @@ def _calcular_resultados_por_municipio(
                 ano=int(ano),
                 cenario=cenario,
                 frequencia_dias_secos_quentes=indices.dias_secos_quentes,
-                intensidade_mm=indices.intensidade_estresse,
+                intensidade_mm_dia=indices.intensidade_mm_dia,
                 criado_em=agora,
             )
         )

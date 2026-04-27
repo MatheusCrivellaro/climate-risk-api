@@ -48,7 +48,7 @@ def test_dias_secos_quentes_conta_corretamente() -> None:
     assert resultado.dias_secos_quentes == 4
 
 
-def test_intensidade_soma_deficit_nos_dias_secos_quentes() -> None:
+def test_intensidade_e_media_do_deficit_nos_dias_secos_quentes() -> None:
     pr = np.array([0.0, 0.5, 2.0])
     tas = np.array([31.0, 30.5, 33.0])  # todos quentes
     evap = np.array([5.0, 4.0, 10.0])  # deficit: 5, 3.5, 8 — mas apenas 2 secos
@@ -56,8 +56,45 @@ def test_intensidade_soma_deficit_nos_dias_secos_quentes() -> None:
     resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
 
     assert resultado.dias_secos_quentes == 2
-    assert resultado.intensidade_estresse == pytest.approx(5.0 + 3.5)
+    # Slice 19: intensidade = média (não soma) do déficit nos dias secos quentes.
+    assert resultado.intensidade_mm_dia == pytest.approx((5.0 + 3.5) / 2)
     assert resultado.deficit_total_mm == pytest.approx(5.0 + 3.5 + 8.0)
+
+
+def test_intensidade_um_dia_seco_quente_mostra_deficit_daquele_dia() -> None:
+    """1 dia seco quente, déficit 8.0 → intensidade_mm_dia == 8.0."""
+    pr = np.array([0.0])
+    tas = np.array([31.0])
+    evap = np.array([8.0])
+
+    resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
+
+    assert resultado.dias_secos_quentes == 1
+    assert resultado.intensidade_mm_dia == pytest.approx(8.0)
+
+
+def test_intensidade_5_dias_secos_quentes_deficit_total_25_da_5() -> None:
+    """5 dias secos quentes, soma de déficits = 25 mm → intensidade 5.0 mm/dia."""
+    pr = np.zeros(5)
+    tas = np.full(5, 31.0)
+    evap = np.array([3.0, 4.0, 5.0, 6.0, 7.0])  # soma 25, média 5
+
+    resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
+
+    assert resultado.dias_secos_quentes == 5
+    assert resultado.intensidade_mm_dia == pytest.approx(5.0)
+
+
+def test_intensidade_zero_quando_deficit_nulo_em_todos_dias_secos_quentes() -> None:
+    """Se o déficit for 0 em todos os dias secos quentes, intensidade == 0.0."""
+    pr = np.array([0.0, 0.0, 0.0])
+    tas = np.array([31.0, 31.0, 31.0])
+    evap = np.array([0.0, 0.0, 0.0])  # déficit zero em todos
+
+    resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
+
+    assert resultado.dias_secos_quentes == 3
+    assert resultado.intensidade_mm_dia == pytest.approx(0.0)
 
 
 def test_deficit_total_inclui_dias_chuvosos_com_deficit_negativo() -> None:
@@ -68,8 +105,8 @@ def test_deficit_total_inclui_dias_chuvosos_com_deficit_negativo() -> None:
     resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
 
     assert resultado.dias_secos_quentes == 1
-    # Dia 1 não entra em intensidade pois deficit == 0 (evap - pr = 0), mas é contado.
-    assert resultado.intensidade_estresse == pytest.approx(0.0)
+    # Dia 1 entra como seco quente; déficit naquele dia = 0 → média = 0/1 = 0.0.
+    assert resultado.intensidade_mm_dia == pytest.approx(0.0)
     # Déficit total: (1-10) + (0-0) = -9.0
     assert resultado.deficit_total_mm == pytest.approx(-9.0)
 
@@ -102,7 +139,8 @@ def test_nan_em_qualquer_variavel_descarta_dia() -> None:
 
     # Apenas o dia 0 é totalmente válido e cumpre os critérios.
     assert resultado.dias_secos_quentes == 1
-    assert resultado.intensidade_estresse == pytest.approx(1.5)
+    # Dia 0: deficit = 2.0 - 0.5 = 1.5; média sobre 1 dia = 1.5.
+    assert resultado.intensidade_mm_dia == pytest.approx(1.5)
     assert resultado.deficit_total_mm == pytest.approx(1.5)
 
 
@@ -114,7 +152,8 @@ def test_ano_sem_secos_quentes_retorna_zero_e_nao_nan() -> None:
     resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
 
     assert resultado.dias_secos_quentes == 0
-    assert resultado.intensidade_estresse == 0.0  # não NaN
+    # Slice 19: convenção "frequência zero ⇒ intensidade 0.0" (não NaN, não erro).
+    assert resultado.intensidade_mm_dia == 0.0
     assert resultado.deficit_total_mm == pytest.approx((1.0 - 5.0) + (2.0 - 10.0) + (3.0 - 15.0))
 
 
@@ -127,7 +166,7 @@ def test_ano_todo_nan_retorna_zeros() -> None:
 
     assert resultado == IndicesAnuaisEstresseHidrico(
         dias_secos_quentes=0,
-        intensidade_estresse=0.0,
+        intensidade_mm_dia=0.0,
         deficit_total_mm=0.0,
     )
 
@@ -158,5 +197,5 @@ def test_regressao_baseline_sintetica() -> None:
     resultado = calcular_indices_anuais_estresse_hidrico(pr, tas, evap, _params_default())
 
     assert resultado.dias_secos_quentes == esperado["dias_secos_quentes"]
-    assert resultado.intensidade_estresse == pytest.approx(esperado["intensidade_estresse"])
+    assert resultado.intensidade_mm_dia == pytest.approx(esperado["intensidade_mm_dia"])
     assert resultado.deficit_total_mm == pytest.approx(esperado["deficit_total_mm"])

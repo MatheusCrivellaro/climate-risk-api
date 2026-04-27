@@ -105,7 +105,7 @@ async def _inserir_resultado(
                 ano=ano,
                 cenario=cenario,
                 frequencia_dias_secos_quentes=frequencia,
-                intensidade_mm=intensidade,
+                intensidade_mm_dia=intensidade,
                 criado_em=agora_iso,
             )
         )

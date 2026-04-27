@@ -2,7 +2,7 @@
 
 Diferente do :class:`ResultadoIndice` (formato *long*, uma linha por índice),
 este formato **wide** agrupa frequência (``dias secos quentes``) e intensidade
-(``mm``) na mesma linha, indexadas por ``(execucao_id, municipio_id, ano,
+(``mm/dia``) na mesma linha, indexadas por ``(execucao_id, municipio_id, ano,
 cenario)``. Frequência e intensidade "andam juntas" — sempre consumidas em
 par — e o formato wide torna consultas tipo "média ponderada" triviais.
 
@@ -28,8 +28,11 @@ class ResultadoEstresseHidrico:
         ano: Ano do resultado (ex.: ``2030``).
         cenario: Rótulo CORDEX (``"rcp45"``, ``"rcp85"``, ``"ssp245"`` etc).
         frequencia_dias_secos_quentes: Contagem de dias secos quentes no ano.
-        intensidade_mm: Soma do déficit hídrico (``evap - pr``) nos dias
-            secos quentes, em mm.
+        intensidade_mm_dia: **Média** do déficit hídrico (``evap - pr``) por
+            dia seco quente do ano, em mm/dia. Convenção: quando
+            ``frequencia_dias_secos_quentes == 0``, vale ``0.0``. Definição
+            introduzida na Slice 19 — a anterior (soma total em mm) foi
+            descartada (ver ADR-011).
         criado_em: Timestamp UTC de persistência.
     """
 
@@ -39,5 +42,5 @@ class ResultadoEstresseHidrico:
     ano: int
     cenario: str
     frequencia_dias_secos_quentes: int
-    intensidade_mm: float
+    intensidade_mm_dia: float
     criado_em: datetime

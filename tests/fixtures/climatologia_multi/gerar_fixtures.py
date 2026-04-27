@@ -177,12 +177,13 @@ def calcular_baseline_esperada() -> dict[str, float | int]:
       = [2.5,      4.3,    -3.0,     1.0,     4.9,
          0.5,      5.7,     1.5,    -6.0,      0.4]
 
-    Intensidade (soma do déficit nos índices 1, 4, 6): 4.3 + 4.9 + 5.7 = 14.9
+    Intensidade (Slice 19, mm/dia = média do déficit nos índices 1, 4, 6):
+        (4.3 + 4.9 + 5.7) / 3 = 14.9 / 3 ≈ 4.9666...
     Déficit total (soma dos 10): 2.5 + 4.3 - 3.0 + 1.0 + 4.9 + 0.5 + 5.7 + 1.5 - 6.0 + 0.4 = 11.8
     """
     return {
         "dias_secos_quentes": 3,
-        "intensidade_estresse": 14.9,
+        "intensidade_mm_dia": 14.9 / 3,
         "deficit_total_mm": 11.8,
     }
 
