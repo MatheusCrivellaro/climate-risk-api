@@ -1063,8 +1063,121 @@ function ligarEventListeners() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+async function restaurarEstado() {
+  const estado = Persistencia.carregar();
+  if (!estado) return;
+
+  if (estado.formulario_pastas) {
+    for (const cenario of ['rcp45', 'rcp85']) {
+      for (const variavel of ['pr', 'tas', 'evap']) {
+        const valor = estado.formulario_pastas[cenario]?.[variavel];
+        if (valor) {
+          const input = qs(`${cenario}-pasta-${variavel}`);
+          if (input) {
+            input.value = valor;
+            validarPastaDebounced(input);
+          }
+        }
+      }
+    }
+  }
+
+  if (estado.ultimos_filtros) {
+    const map = {
+      execucao_id: 'filtro-execucao',
+      cenario: 'filtro-cenario',
+      ano_min: 'filtro-ano-min',
+      ano_max: 'filtro-ano-max',
+      uf: 'filtro-uf',
+    };
+    for (const [key, value] of Object.entries(estado.ultimos_filtros)) {
+      const id = map[key];
+      if (!id) continue;
+      const elem = qs(id);
+      if (elem && value !== null && value !== undefined && value !== '') {
+        elem.value = value;
+      }
+    }
+  }
+
+  if (estado.execucoes && estado.execucoes.length > 0) {
+    await reconciliarExecucoesAtivas(estado.execucoes);
+  }
+
+  if (!window.location.hash && estado.ultima_aba) {
+    trocarAba(estado.ultima_aba);
+  }
+}
+
+async function reconciliarExecucoesAtivas(execucoesPersistidas) {
+  const reconciliados = [];
+  let temNovasCompleted = false;
+
+  for (const exec of execucoesPersistidas) {
+    if (!exec.execucao_id) continue;
+    try {
+      const resp = await fetch(API.EXECUCAO_GET(exec.execucao_id), {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (resp.status === 404) {
+        continue;
+      }
+
+      if (!resp.ok) {
+        reconciliados.push(exec);
+        continue;
+      }
+
+      const data = await resp.json();
+      const statusServidor = data.status;
+
+      if (
+        (exec.ultimo_status === 'pending' || exec.ultimo_status === 'running') &&
+        statusServidor === 'completed'
+      ) {
+        temNovasCompleted = true;
+      }
+
+      exec.ultimo_status = statusServidor;
+      reconciliados.push(exec);
+
+      if (statusServidor === 'pending' || statusServidor === 'running') {
+        state.execucoesAtivas.push({
+          cenario: exec.cenario,
+          id: exec.execucao_id,
+          jobId: null,
+          status: statusServidor,
+          erro: null,
+        });
+      }
+    } catch (e) {
+      console.warn(`Falha ao reconciliar ${exec.execucao_id}:`, e);
+      reconciliados.push(exec);
+    }
+  }
+
+  const estado = Persistencia.carregar() || estadoVazio();
+  estado.execucoes = reconciliados;
+  Persistencia.salvar(estado);
+
+  if (state.execucoesAtivas.length > 0) {
+    qs('status-execucoes').hidden = false;
+    renderizarStatusExecucoes();
+    iniciarPolling();
+  }
+
+  if (temNovasCompleted && state.abaAtiva !== 'resultados') {
+    state.resultadosNovosDisponiveis = true;
+    const badge = qs('badge-novos-resultados');
+    badge.hidden = false;
+    badge.textContent = '●';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   popularSelectUFs();
   ligarEventListeners();
   inicializarTabs();
+  await restaurarEstado();
 });
