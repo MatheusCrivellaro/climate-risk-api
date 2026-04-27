@@ -61,7 +61,8 @@ montado em `/app/`).
 | Cálculo síncrono | `POST /api/calculos/pontos` — até 100 pontos; pura, não persiste. |
 | Execuções assíncronas | `POST /api/execucoes` (CORDEX em grade), `POST /api/execucoes/pontos` (lote grande de pontos), `GET /api/execucoes`, `GET /api/execucoes/{id}`, `DELETE /api/execucoes/{id}`. |
 | Jobs (fila) | `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/retry`. |
-| Resultados | `GET /api/resultados`, `GET /api/resultados/agregados`, `GET /api/resultados/stats`. |
+| Resultados | `GET /api/resultados`, `GET /api/resultados/agregados`, `GET /api/resultados/stats`, `GET /api/resultados/estresse-hidrico`, `GET /api/resultados/estresse-hidrico/export` (CSV/XLSX/JSON). |
+| Filesystem | `GET /api/fs/listar` — browser de pastas (requer `CLIMATE_RISK_FS_RAIZ`). |
 | Geocodificação | `POST /api/localizacoes/geocodificar`, `POST /api/localizacoes/pontos`. |
 | Fornecedores | `POST/GET/DELETE /api/fornecedores`, `POST /api/fornecedores/importar`. |
 | Cobertura | `POST /api/cobertura/fornecedores`. |
@@ -70,25 +71,23 @@ montado em `/app/`).
 Erros seguem RFC 7807 (`application/problem+json`) — ver
 `docs/desenho-api.md` para a tabela completa de códigos.
 
-## Interfaces disponíveis
+## Interface
 
-O projeto oferece **duas interfaces web** servidas pelo mesmo backend:
+A interface principal está em `/estudo/`, focada exclusivamente no pipeline
+de estresse hídrico. É HTML/CSS/JS puro, sem dependências externas além de
+Chart.js (CDN), e funciona assim que o backend subir.
 
-### `/app/` — Interface completa (React)
+Acesso: `http://localhost:8000/estudo/`
 
-Painel administrativo completo, com dashboard, múltiplas execuções,
-consultas ricas, CRUD de fornecedores, geocodificação e cobertura.
+A interface React em `/app/` foi desativada — o código permanece em
+`frontend/` para reativação futura, mas não está montada na aplicação. Os
+endpoints `/api/*` continuam todos funcionais para uso programático.
 
-Requer build: `cd frontend && pnpm install && pnpm build`.
-
-### `/estudo/` — Interface simplificada (HTML puro)
-
-Página única focada **exclusivamente** no pipeline de estresse hídrico,
-operando no modo **lote**: aceita 6 pastas (3 variáveis × 2 cenários) num
-único formulário e cria duas execuções (`rcp45` + `rcp85`) por submit.
-Consome o endpoint `POST /api/execucoes/estresse-hidrico/em-lote` (Slice 17),
-que aceita pastas em vez de arquivos individuais — todos os `.nc` de cada
-pasta são concatenados temporalmente pelo handler.
+A página `/estudo/` opera no modo **lote**: aceita 6 pastas (3 variáveis x 2
+cenários) num único formulário e cria duas execuções (`rcp45` + `rcp85`)
+por submit. Consome o endpoint `POST /api/execucoes/estresse-hidrico/em-lote`
+(Slice 17), que aceita pastas em vez de arquivos individuais — todos os
+`.nc` de cada pasta são concatenados temporalmente pelo handler.
 
 A tabela de resultados expõe duas métricas por município/ano:
 
@@ -101,17 +100,21 @@ A tabela de resultados expõe duas métricas por município/ano:
 O endpoint antigo `POST /api/execucoes/estresse-hidrico` (arquivo único)
 continua existindo para uso programático.
 
-HTML + CSS + JS vanilla, sem build step. Ideal para demos, testes rápidos
-e uso sem instalar Node — funciona assim que o backend subir.
+### Configuração necessária
 
-Acesso: `http://localhost:8000/estudo/`.
+- `CLIMATE_RISK_SHAPEFILE_MUN_PATH`: caminho para o shapefile de municípios
+  IBGE.
+- `CLIMATE_RISK_FS_RAIZ`: pasta raiz a partir da qual o browser de pastas
+  pode navegar (necessária para a feature de seleção visual de pastas em
+  `/estudo/`).
 
 ## Frontend
 
-O projeto convive com um frontend React/Vite/TypeScript em `frontend/`.
-Backend e frontend compartilham o mesmo repositório (monorepo simples) e,
-em produção, a mesma origem — o FastAPI serve o build estático em `/app/`
-e as rotas da API vivem em `/api/`.
+O projeto convive com um frontend React/Vite/TypeScript em `frontend/`. A
+partir da Slice 20 ele **não é montado pelo backend** — o código permanece
+disponível para reativação futura, mas a única interface visível é
+`/estudo/` (HTML/CSS/JS puro). Para reativar `/app/`, descomentar o trecho
+sinalizado em `src/climate_risk/interfaces/app.py`.
 
 ### Estrutura
 
@@ -151,34 +154,18 @@ o frontend sempre consome `/api/...` com mesma-origem e não há CORS.
 Abra `http://localhost:5173/app/` no browser. O Swagger continua em
 `http://localhost:8000/docs`.
 
-### Modo demo integrada (build + backend)
+### URLs relevantes
 
-Útil para reproduzir o comportamento de produção localmente (um único
-processo servindo tudo).
+| URL                                  | O que responde                              |
+| ------------------------------------ | ------------------------------------------- |
+| `http://localhost:8000/estudo/`      | Interface HTML/CSS/JS puro (estresse hídrico). |
+| `http://localhost:8000/api/...`      | Rotas da API.                               |
+| `http://localhost:8000/docs`         | Swagger UI.                                 |
+| `http://localhost:8000/openapi.json` | Contrato OpenAPI cru.                       |
 
-```bash
-# 1. Gerar o build estático do frontend.
-cd frontend
-pnpm install           # apenas uma vez
-pnpm build             # cria frontend/dist/
-cd ..
-
-# 2. Subir o backend (que detecta frontend/dist/ e monta /app/).
-uv run climate-risk-api
-```
-
-URLs relevantes:
-
-| URL                               | O que responde                                |
-| --------------------------------- | --------------------------------------------- |
-| `http://localhost:8000/app/`      | Shell do frontend React (React Router toma dali). |
-| `http://localhost:8000/estudo/`   | Interface simplificada HTML puro (estresse hídrico). |
-| `http://localhost:8000/api/...`   | Rotas da API.                                 |
-| `http://localhost:8000/docs`      | Swagger UI.                                   |
-| `http://localhost:8000/openapi.json` | Contrato OpenAPI cru (fonte dos tipos).    |
-
-Se `frontend/dist/` não existir quando o backend subir, `/app/*` responde
-503 com um HTML explicando como rodar o build.
+`/app/` retorna 404 — o mount foi desativado na Slice 20 (ADR-012). Para
+reativá-lo, descomentar o trecho identificado em
+`src/climate_risk/interfaces/app.py`.
 
 ### Regerando tipos quando o OpenAPI muda
 
@@ -230,7 +217,7 @@ pnpm build        # build de produção
   de jobs zumbis, troubleshooting.
 - [`docs/divida-tecnica.md`](docs/divida-tecnica.md) — débitos aceitos
   e resolvidos.
-- [`docs/adrs/`](docs/adrs/) — decisões arquiteturais (ADR-001…007).
+- [`docs/adrs/`](docs/adrs/) — decisões arquiteturais (ADR-001…012).
 
 ## Histórico
 

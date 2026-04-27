@@ -65,6 +65,21 @@ com a sessão da task de heartbeat — sem esse fix, falhas geravam o erro
 SQLAlchemy `"This session is provisioning a new connection; concurrent
 operations are not permitted"` e entravam em loop de retry.
 
+### Endpoints da Slice 20.1
+
+- `GET /api/fs/listar`: browser de pastas no servidor. Requer
+  `CLIMATE_RISK_FS_RAIZ`. Path traversal mitigado via
+  `resolve(strict=True) + relative_to(raiz)`.
+- `GET /api/resultados/estresse-hidrico/export`: exporta resultados em
+  CSV/XLSX/JSON. Limite de 200.000 linhas (constante
+  `LIMITE_LINHAS_EXPORT` em `interfaces/rotas/estresse_hidrico.py`).
+
+### Interface principal
+
+`/app/` desativado a partir da Slice 20 (ADR-012); `/estudo/` é a única
+interface visível. O código React permanece em `frontend/` para reativação
+futura, mas o mount foi removido de `interfaces/app.py`.
+
 ## Convenções
 
 - Arquitetura hexagonal com camadas explícitas (ADR-005): `domain`,
