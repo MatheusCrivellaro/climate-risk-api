@@ -47,17 +47,21 @@ class IndicesAnuaisEstresseHidrico:
         dias_secos_quentes: Contagem (inteiro ≥ 0) de dias onde ``pr`` e
             ``tas`` satisfazem os limiares simultaneamente e nenhuma
             das três variáveis era ``NaN``.
-        intensidade_estresse: Soma do déficit (``evap - pr``) restrita aos
-            dias secos quentes. Em mm. Se não há dias secos quentes, retorna
-            ``0.0`` (não ``NaN``) — a semântica "intensidade zero" é
-            informativa e evita que a coluna downstream seja poluída por NaN.
+        intensidade_mm_dia: **Média** do déficit (``evap - pr``) por dia
+            seco quente do ano, em mm/dia. Calculado como
+            ``soma(deficit nos dias secos quentes) / dias_secos_quentes``.
+            Se não há dias secos quentes (``dias_secos_quentes == 0``),
+            retorna ``0.0`` por convenção (não ``NaN``) — interpretação:
+            "não houve estresse no ano". Definição introduzida na Slice 19;
+            a definição anterior (soma total em mm) foi descartada — ver
+            ADR-011.
         deficit_total_mm: Soma do déficit diário acumulado em **todos** os
             dias válidos do ano (inclusive dias chuvosos, onde o déficit
             pode ser negativo). Em mm.
     """
 
     dias_secos_quentes: int
-    intensidade_estresse: float
+    intensidade_mm_dia: float
     deficit_total_mm: float
 
 
@@ -112,7 +116,7 @@ def calcular_indices_anuais_estresse_hidrico(
     if not np.any(validos):
         return IndicesAnuaisEstresseHidrico(
             dias_secos_quentes=0,
-            intensidade_estresse=0.0,
+            intensidade_mm_dia=0.0,
             deficit_total_mm=0.0,
         )
 
@@ -124,13 +128,15 @@ def calcular_indices_anuais_estresse_hidrico(
     deficit_diario = calcular_deficit_hidrico_diario(evap_v, pr_v)
 
     dias_secos_quentes = int(mascara_secos_quentes.sum())
-    intensidade_estresse = (
-        float(deficit_diario[mascara_secos_quentes].sum()) if dias_secos_quentes > 0 else 0.0
-    )
+    if dias_secos_quentes > 0:
+        soma_deficit = float(deficit_diario[mascara_secos_quentes].sum())
+        intensidade_mm_dia = soma_deficit / dias_secos_quentes
+    else:
+        intensidade_mm_dia = 0.0
     deficit_total_mm = float(deficit_diario.sum())
 
     return IndicesAnuaisEstresseHidrico(
         dias_secos_quentes=dias_secos_quentes,
-        intensidade_estresse=intensidade_estresse,
+        intensidade_mm_dia=intensidade_mm_dia,
         deficit_total_mm=deficit_total_mm,
     )
