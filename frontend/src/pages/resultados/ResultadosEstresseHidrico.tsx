@@ -96,8 +96,8 @@ export default function ResultadosEstresseHidricoPage() {
     },
     {
       key: 'intensidade',
-      header: 'Intensidade (mm)',
-      render: (row) => formatDecimal(row.intensidade_mm),
+      header: 'Intensidade (mm/dia)',
+      render: (row) => formatDecimal(row.intensidade_mm_dia),
     },
     {
       key: 'execucao_id',

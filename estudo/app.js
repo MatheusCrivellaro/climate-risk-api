@@ -327,7 +327,7 @@ function renderizarTabela(items) {
         <td>${escapeHtml(item.cenario)}</td>
         <td>${escapeHtml(item.ano)}</td>
         <td>${escapeHtml(item.frequencia_dias_secos_quentes)}</td>
-        <td>${formatarNumero(item.intensidade_mm)}</td>
+        <td>${formatarNumero(item.intensidade_mm_dia)}</td>
       </tr>
     `;
   });

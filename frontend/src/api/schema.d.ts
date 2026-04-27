@@ -1435,8 +1435,8 @@ export interface components {
             cenario: string;
             /** Frequencia Dias Secos Quentes */
             frequencia_dias_secos_quentes: number;
-            /** Intensidade Mm */
-            intensidade_mm: number;
+            /** Intensidade Mm Dia */
+            intensidade_mm_dia: number;
             /** Nome Municipio */
             nome_municipio?: string | null;
             /** Uf */

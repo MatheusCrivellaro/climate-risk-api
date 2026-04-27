@@ -23,7 +23,7 @@ vi.mock('@/api/endpoints/estresseHidrico', async () => {
           ano: 2026,
           cenario: 'rcp45',
           frequencia_dias_secos_quentes: 10,
-          intensidade_mm: 15.5,
+          intensidade_mm_dia: 15.5,
           nome_municipio: 'São Paulo',
           uf: 'SP',
         },
