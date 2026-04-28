@@ -376,3 +376,118 @@ def test_iterar_3_grades_diferentes_sincronizam_com_intersecao(tmp_path: Path) -
     assert len(tuplas) == 1
     (mun_pr, _, _), (mun_tas, _, _), (mun_evap, _, _) = tuplas[0]
     assert mun_pr == mun_tas == mun_evap == 9999999
+
+
+# ---------------------------------------------------------------------
+# Slice 25: materialização única em iterar_por_municipio
+# ---------------------------------------------------------------------
+
+
+class _SpyDataArray:
+    """Wrapper que conta acessos a ``.values``, delegando o resto.
+
+    Usado para verificar que o iterator chama ``dados.values`` exatamente
+    uma vez por execução, mesmo iterando por N municípios. Acessos a
+    ``.values`` em DataArrays internos (ex.: ``dados['time'].values``)
+    não passam pelo spy e portanto não são contados.
+    """
+
+    def __init__(self, da: xr.DataArray) -> None:
+        self._da = da
+        self.values_calls = 0
+
+    @property
+    def values(self) -> np.ndarray:
+        self.values_calls += 1
+        return self._da.values
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._da, name)
+
+    def __getitem__(self, key: object) -> object:
+        return self._da[key]
+
+
+def _grade_sintetica(n_municipios: int = 5, n_dias: int = 4) -> xr.DataArray:
+    """Cria grade pequena cobrindo os 2 municípios da fixture sintética.
+
+    Os municípios A (oeste, ID 9999999) e B (leste, ID 8888888) ocupam
+    ``[-50, -40]`` e ``[-40, -30]`` em longitude respectivamente. Este
+    helper fabrica grades com mais células que a fixture default para
+    permitir testes de spy sem custo de I/O extra.
+    """
+    del n_municipios  # Apenas 2 municípios na fixture sintética.
+    lat = np.array([1.0, 3.0, 5.0, 7.0, 9.0])
+    lon = np.array([-49.0, -44.5, -40.0 + 1e-6, -35.5, -31.0])
+    tempo = pd.date_range("2030-01-01", periods=n_dias, freq="D")
+    valores = np.zeros((n_dias, 5, 5), dtype=np.float64)
+    valores[:, :, 0:2] = 1.0
+    valores[:, :, 2:5] = 2.0
+    return xr.DataArray(
+        valores,
+        dims=("time", "lat", "lon"),
+        coords={"time": tempo, "lat": lat, "lon": lon},
+        name="pr",
+    )
+
+
+def test_iterar_por_municipio_chama_dados_values_uma_vez(tmp_path: Path) -> None:
+    """A materialização única é o coração da Slice 25: 1 compute por execução."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = _grade_sintetica()
+    spy = _SpyDataArray(da)
+
+    tuplas = list(agreg.iterar_por_municipio(spy))  # type: ignore[arg-type]
+
+    assert len(tuplas) == 2  # 2 municípios na fixture
+    assert spy.values_calls == 1
+
+
+def test_iterar_por_municipio_com_filtro_chama_values_uma_vez(tmp_path: Path) -> None:
+    """Mesmo com filtro ``municipios_alvo``, a materialização permanece única."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = _grade_sintetica()
+    spy = _SpyDataArray(da)
+
+    tuplas = list(
+        agreg.iterar_por_municipio(spy, municipios_alvo={9999999})  # type: ignore[arg-type]
+    )
+
+    assert len(tuplas) == 1
+    assert spy.values_calls == 1
+
+
+def test_iterar_por_municipio_filtro_vazio_nao_chama_values(tmp_path: Path) -> None:
+    """Otimização: filtro vazio nunca paga o custo do compute completo."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = _grade_sintetica()
+    spy = _SpyDataArray(da)
+
+    tuplas = list(
+        agreg.iterar_por_municipio(spy, municipios_alvo=set())  # type: ignore[arg-type]
+    )
+
+    assert tuplas == []
+    assert spy.values_calls == 0
+
+
+def test_iterar_por_municipio_resultado_identico_ao_legacy(tmp_path: Path) -> None:
+    """Paridade numérica com ``_agregar_por_municipio_com_mapa`` (referência)."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = _grade_sintetica(n_dias=5)
+
+    do_iterator = {int(mun): serie for mun, _, serie in agreg.iterar_por_municipio(da)}
+    df_legacy = agreg.agregar_por_municipio(da, nome_variavel="pr")
+    do_legacy: dict[int, np.ndarray] = {}
+    for mun_str, grupo in df_legacy.groupby("municipio_id"):
+        do_legacy[int(str(mun_str))] = grupo["valor"].to_numpy(dtype=np.float64)
+
+    assert set(do_iterator.keys()) == set(do_legacy.keys())
+    for municipio_id, serie_iter in do_iterator.items():
+        np.testing.assert_allclose(
+            serie_iter,
+            do_legacy[municipio_id],
+            rtol=1e-9,
+            atol=1e-12,
+            err_msg=f"Divergência no município {municipio_id}",
+        )
