@@ -43,9 +43,26 @@ class _LeitorFake:
 
 @dataclass
 class _AgregadorFake:
-    """Yield séries municipais canned. A chave é o ``name`` do DataArray."""
+    """Séries municipais canned. A chave é o ``name`` do DataArray.
+
+    Slice 22: expõe `municipios_mapeados` e `serie_de_municipio` que o
+    handler usa para iterar pela interseção das 3 grades.
+    """
 
     series_por_variavel: dict[str, list[tuple[int, np.ndarray, np.ndarray]]]
+
+    def municipios_mapeados(self, dados: xr.DataArray) -> set[int]:
+        nome = str(dados.name or "")
+        return {mun for mun, _, _ in self.series_por_variavel[nome]}
+
+    def serie_de_municipio(
+        self, dados: xr.DataArray, municipio_id: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        nome = str(dados.name or "")
+        for mun, datas, serie in self.series_por_variavel[nome]:
+            if mun == municipio_id:
+                return datas, serie
+        raise KeyError(f"Município {municipio_id} ausente da grade {nome!r}")
 
     def iterar_por_municipio(
         self, dados: xr.DataArray

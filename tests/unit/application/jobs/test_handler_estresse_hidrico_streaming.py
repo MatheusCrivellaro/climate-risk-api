@@ -1,13 +1,13 @@
-"""Testes do streaming do handler de estresse hídrico (Slice 21 / ADR-013).
+"""Testes do streaming do handler de estresse hídrico (Slice 21 / 22).
 
-Foco em: idempotência (deletar parciais), batches, sincronização entre 3
-iteradores, logging estruturado, marcação final de execução.
+Foco em: idempotência (deletar parciais), batches, interseção de cobertura
+municipal entre as 3 grades (Slice 22 / ADR-014), logging estruturado,
+marcação final de execução.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,57 +58,56 @@ class _LeitorFake:
 
 @dataclass
 class _AgregadorFake:
-    """Yield N municípios sequenciais com séries idênticas para todas as variáveis."""
+    """Agregador fake com cobertura por variável configurável.
 
-    n_municipios: int
+    Slice 22: o handler agora calcula interseção das 3 grades em vez de
+    pareiar iteradores. Esta fake expõe :meth:`municipios_mapeados` e
+    :meth:`serie_de_municipio` por variável (``"pr"`` / ``"tas"`` / ``"evap"``).
+    Permite simular grades com coberturas distintas para testar o caminho
+    de divergência sem precisar do shapefile real.
+    """
+
+    cobertura: dict[str, set[int]]
     datas: np.ndarray
 
-    def iterar_por_municipio(
-        self, dados: xr.DataArray
-    ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
-        for i in range(self.n_municipios):
-            municipio_id = 1000000 + i
-            # Valores sintéticos: pr=0 (sempre seco), tas=35 (sempre quente),
-            # evap=2 (déficit constante 2.0). Resultado anual deterministico.
-            if dados.name == "pr":
-                serie = np.zeros_like(self.datas, dtype=np.float64)
-            elif dados.name == "tas":
-                serie = np.full_like(self.datas, 35.0, dtype=np.float64)
-            elif dados.name == "evap":
-                serie = np.full_like(self.datas, 2.0, dtype=np.float64)
-            else:
-                raise AssertionError(f"variável inesperada: {dados.name!r}")
-            yield municipio_id, self.datas.copy(), serie
+    @classmethod
+    def uniforme(cls, n_municipios: int, datas: np.ndarray) -> _AgregadorFake:
+        ids = {1000000 + i for i in range(n_municipios)}
+        return cls(cobertura={"pr": ids, "tas": ids, "evap": ids}, datas=datas)
+
+    def municipios_mapeados(self, dados: xr.DataArray) -> set[int]:
+        return set(self.cobertura[self._variavel(dados)])
+
+    def serie_de_municipio(
+        self, dados: xr.DataArray, municipio_id: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        variavel = self._variavel(dados)
+        if municipio_id not in self.cobertura[variavel]:
+            raise KeyError(f"Município {municipio_id} fora da grade {variavel}")
+        return self.datas.copy(), self._serie_constante(variavel)
+
+    def iterar_por_municipio(self, dados: xr.DataArray) -> Any:  # pragma: no cover
+        raise NotImplementedError("Slice 22 não usa iterar_por_municipio no handler.")
 
     def agregar_por_municipio(
         self, dados: xr.DataArray, nome_variavel: str
     ) -> pd.DataFrame:  # pragma: no cover
         raise NotImplementedError
 
+    def _variavel(self, dados: xr.DataArray) -> str:
+        nome = str(dados.name)
+        if nome not in self.cobertura:
+            raise AssertionError(f"variável inesperada: {nome!r}")
+        return nome
 
-@dataclass
-class _AgregadorDessincronizado:
-    """Yield ordens divergentes entre as 3 variáveis para acionar a guarda."""
-
-    def iterar_por_municipio(
-        self, dados: xr.DataArray
-    ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
-        datas = pd.date_range("2030-01-01", periods=2, freq="D").to_numpy()
-        if dados.name == "pr":
-            yield 1, datas, np.array([0.0, 0.0])
-            yield 2, datas, np.array([0.0, 0.0])
-        elif dados.name == "tas":
-            # Ordem trocada de propósito.
-            yield 2, datas, np.array([35.0, 35.0])
-            yield 1, datas, np.array([35.0, 35.0])
-        else:  # evap
-            yield 1, datas, np.array([2.0, 2.0])
-            yield 2, datas, np.array([2.0, 2.0])
-
-    def agregar_por_municipio(
-        self, dados: xr.DataArray, nome_variavel: str
-    ) -> pd.DataFrame:  # pragma: no cover
-        raise NotImplementedError
+    def _serie_constante(self, variavel: str) -> np.ndarray:
+        if variavel == "pr":
+            return np.zeros_like(self.datas, dtype=np.float64)
+        if variavel == "tas":
+            return np.full_like(self.datas, 35.0, dtype=np.float64)
+        if variavel == "evap":
+            return np.full_like(self.datas, 2.0, dtype=np.float64)
+        raise AssertionError(variavel)
 
 
 @dataclass
@@ -186,14 +185,14 @@ def _construir_handler(
     n_municipios: int,
     repo_resultados: _RepoResultadosFake,
     repo_execucoes: _RepoExecucoesFake,
-    agregador_dessincronizado: bool = False,
+    cobertura: dict[str, set[int]] | None = None,
 ) -> Any:
     datas = pd.date_range("2030-01-01", periods=2, freq="D").to_numpy()
     leitor = _LeitorFake(pr=_da("pr"), tas=_da("tas"), evap=_da("evap"))
     agregador: Any = (
-        _AgregadorDessincronizado()
-        if agregador_dessincronizado
-        else _AgregadorFake(n_municipios=n_municipios, datas=datas)
+        _AgregadorFake(cobertura=cobertura, datas=datas)
+        if cobertura is not None
+        else _AgregadorFake.uniforme(n_municipios=n_municipios, datas=datas)
     )
     return criar_handler_estresse_hidrico(
         leitor=leitor,  # type: ignore[arg-type]
@@ -242,21 +241,89 @@ async def test_handler_persiste_em_batches_nao_em_uma_chamada(
 
 
 @pytest.mark.asyncio
-async def test_handler_levanta_erro_descritivo_em_iteradores_dessincronizados() -> None:
+async def test_handler_processa_apenas_interseccao_de_municipios() -> None:
+    """Slice 22: pr/tas cobrem {1,2,3}; evap cobre {2,3,4}. Processa só {2,3}."""
     repo_resultados = _RepoResultadosFake()
-    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_d": _execucao("exec_d")})
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_int": _execucao("exec_int")})
     handler = _construir_handler(
-        n_municipios=2,
+        n_municipios=0,
         repo_resultados=repo_resultados,
         repo_execucoes=repo_execucoes,
-        agregador_dessincronizado=True,
+        cobertura={"pr": {1, 2, 3}, "tas": {1, 2, 3}, "evap": {2, 3, 4}},
     )
 
-    with pytest.raises(RuntimeError, match="Inconsistência de iteração"):
-        await handler(_payload("exec_d"))
+    await handler(_payload("exec_int"))
 
-    # Execução transiciona para failed.
-    assert repo_execucoes.execucoes["exec_d"].status == StatusExecucao.FAILED
+    municipios_persistidos = {r.municipio_id for r in repo_resultados.salvos}
+    assert municipios_persistidos == {2, 3}
+
+
+@pytest.mark.asyncio
+async def test_handler_loga_warning_com_municipios_divergentes(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Warning estruturado tem contagens e amostras corretas por categoria."""
+    repo_resultados = _RepoResultadosFake()
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_w": _execucao("exec_w")})
+    handler = _construir_handler(
+        n_municipios=0,
+        repo_resultados=repo_resultados,
+        repo_execucoes=repo_execucoes,
+        cobertura={"pr": {1, 2, 3}, "tas": {1, 2, 3}, "evap": {2, 3, 4}},
+    )
+
+    with caplog.at_level(logging.WARNING, logger=modulo_handlers.logger.name):
+        await handler(_payload("exec_w"))
+
+    warnings_div = [rec for rec in caplog.records if "divergentes entre grades" in rec.message]
+    assert len(warnings_div) == 1, "esperava um único warning de divergência"
+    rec = warnings_div[0]
+    assert getattr(rec, "execucao_id", None) == "exec_w"
+    assert getattr(rec, "total_pulados", None) == 2
+    assert getattr(rec, "total_processados", None) == 2
+
+    em_pr_tas = getattr(rec, "em_pr_tas_mas_nao_evap", {})
+    assert em_pr_tas["count"] == 1
+    assert em_pr_tas["amostra"] == [1]
+
+    so_evap = getattr(rec, "so_em_evap", {})
+    assert so_evap["count"] == 1
+    assert so_evap["amostra"] == [4]
+
+
+@pytest.mark.asyncio
+async def test_handler_nao_loga_warning_quando_grades_concordam(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    repo_resultados = _RepoResultadosFake()
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_ok": _execucao("exec_ok")})
+    handler = _construir_handler(
+        n_municipios=3,
+        repo_resultados=repo_resultados,
+        repo_execucoes=repo_execucoes,
+    )
+
+    with caplog.at_level(logging.WARNING, logger=modulo_handlers.logger.name):
+        await handler(_payload("exec_ok"))
+
+    warnings_div = [rec for rec in caplog.records if "divergentes entre grades" in rec.message]
+    assert warnings_div == []
+
+
+@pytest.mark.asyncio
+async def test_handler_processa_todos_quando_grades_iguais() -> None:
+    repo_resultados = _RepoResultadosFake()
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_e": _execucao("exec_e")})
+    handler = _construir_handler(
+        n_municipios=3,
+        repo_resultados=repo_resultados,
+        repo_execucoes=repo_execucoes,
+    )
+
+    await handler(_payload("exec_e"))
+
+    municipios_persistidos = {r.municipio_id for r in repo_resultados.salvos}
+    assert municipios_persistidos == {1000000, 1000001, 1000002}
 
 
 @pytest.mark.asyncio

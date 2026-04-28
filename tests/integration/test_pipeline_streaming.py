@@ -264,6 +264,94 @@ async def test_pipeline_streaming_idempotente(
     assert set(ids_1).isdisjoint(set(ids_2))
 
 
+def _construir_dados_com_lon_subset(
+    n_municipios: int,
+    lon_indices: list[int],
+) -> DadosClimaticosMultiVariaveis:
+    """Constrói o dataset cobrindo apenas um subconjunto de longitudes/municípios.
+
+    Slice 22: simula uma grade com cobertura municipal reduzida em relação
+    ao shapefile (modelo climático com bordas distintas). Demais municípios
+    não serão mapeados pela grade.
+    """
+    tempo = pd.date_range("2030-01-01", periods=730, freq="D")
+    lat = np.array([5.0])
+    largura = 20.0 / n_municipios
+    lon_completo = [-50.0 + (i + 0.5) * largura for i in lon_indices]
+    lon = np.array(lon_completo)
+    n = len(lon_indices)
+
+    pr_vals = np.zeros((730, 1, n), dtype=np.float64)
+    tas_vals = np.full((730, 1, n), 35.0, dtype=np.float64)
+    evap_vals = np.full((730, 1, n), 5.0, dtype=np.float64)
+
+    pr = xr.DataArray(
+        pr_vals,
+        dims=("time", "lat", "lon"),
+        coords={"time": tempo, "lat": lat, "lon": lon},
+        name="pr",
+    )
+    tas = xr.DataArray(
+        tas_vals,
+        dims=("time", "lat", "lon"),
+        coords={"time": tempo, "lat": lat, "lon": lon},
+        name="tas",
+    )
+    evap = xr.DataArray(
+        evap_vals,
+        dims=("time", "lat", "lon"),
+        coords={"time": tempo, "lat": lat, "lon": lon},
+        name="evap",
+    )
+    return DadosClimaticosMultiVariaveis(
+        precipitacao_diaria_mm=pr,
+        temperatura_diaria_c=tas,
+        evaporacao_diaria_mm=evap,
+        tempo=pd.DatetimeIndex(tempo),
+        cenario="rcp45",
+    )
+
+
+@pytest.mark.asyncio
+async def test_pipeline_streaming_processa_apenas_interseccao_quando_grades_divergem(
+    async_session: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    """Slice 22: pr/tas cobrem A,B,C; evap cobre B,C,D. Pipeline processa só B,C."""
+    n = 4  # Municípios A, B, C, D nos índices 0, 1, 2, 3.
+    shapefile = _gerar_shapefile_sintetico(tmp_path, n=n)
+
+    # pr e tas: usam grade reduzida — apenas A, B, C (índices 0, 1, 2).
+    dados_pr_tas = _construir_dados_com_lon_subset(n_municipios=n, lon_indices=[0, 1, 2])
+    # evap: usa grade reduzida — apenas B, C, D (índices 1, 2, 3).
+    dados_evap = _construir_dados_com_lon_subset(n_municipios=n, lon_indices=[1, 2, 3])
+
+    dados_combinados = DadosClimaticosMultiVariaveis(
+        precipitacao_diaria_mm=dados_pr_tas.precipitacao_diaria_mm,
+        temperatura_diaria_c=dados_pr_tas.temperatura_diaria_c,
+        evaporacao_diaria_mm=dados_evap.evaporacao_diaria_mm,
+        tempo=dados_pr_tas.tempo,
+        cenario="rcp45",
+    )
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
+    execucao_id = gerar_id("exec")
+    await _semear_execucao(async_session, execucao_id)
+    handler = _construir_handler_streaming(
+        async_session, shapefile=shapefile, cache_dir=cache_dir, dados=dados_combinados
+    )
+
+    await handler(_payload(execucao_id))
+
+    repo = SQLAlchemyRepositorioResultadoEstresseHidrico(async_session)
+    linhas = await repo.listar(execucao_id=execucao_id, limit=100)
+    municipios_persistidos = {r.municipio_id for r in linhas}
+    # Apenas a interseção: índices 1, 2 → IDs 1000001, 1000002.
+    assert municipios_persistidos == {1000001, 1000002}
+
+
 @pytest.mark.asyncio
 async def test_pipeline_streaming_memoria_limitada(
     async_session: AsyncSession,

@@ -148,3 +148,120 @@ def test_legado_agregar_continua_devolvendo_dataframe(tmp_path: Path) -> None:
     # IDs continuam strings (vêm do shapefile como string).
     assert set(df["municipio_id"].unique()) == {"9999999", "8888888"}
     assert len(df) == 6
+
+
+# ---------------------------------------------------------------------
+# Slice 22: municipios_mapeados + serie_de_municipio
+# ---------------------------------------------------------------------
+
+
+def test_municipios_mapeados_retorna_set_de_int(tmp_path: Path) -> None:
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        municipios = agreg.municipios_mapeados(da)
+    finally:
+        da.close()
+
+    assert isinstance(municipios, set)
+    assert municipios
+    assert all(isinstance(m, int) for m in municipios)
+
+
+def test_municipios_mapeados_consistente_com_iterar(tmp_path: Path) -> None:
+    """O conjunto retornado bate exatamente com os IDs yielded por iterar."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        municipios_set = agreg.municipios_mapeados(da)
+        municipios_iter = {mun for mun, _, _ in agreg.iterar_por_municipio(da)}
+    finally:
+        da.close()
+
+    assert municipios_set == municipios_iter
+
+
+def test_municipios_mapeados_usa_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Duas chamadas consecutivas devem reusar o mapa em memória."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        chamadas: list[int] = []
+        original = agreg._obter_mapa_celulas
+
+        def _spy(lat2d: np.ndarray, lon2d: np.ndarray) -> pd.DataFrame:
+            chamadas.append(1)
+            return original(lat2d, lon2d)
+
+        monkeypatch.setattr(agreg, "_obter_mapa_celulas", _spy)
+
+        agreg.municipios_mapeados(da)
+        agreg.municipios_mapeados(da)
+    finally:
+        da.close()
+
+    assert sum(chamadas) == 1
+
+
+def test_municipios_mapeados_grade_sem_municipios_retorna_set_vazio(tmp_path: Path) -> None:
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+
+    tempo = pd.date_range("2030-01-01", periods=2, freq="D")
+    lat = np.array([20.0, 22.0])
+    lon = np.array([-60.0, -58.0])
+    da = xr.DataArray(
+        np.ones((2, 2, 2), dtype=np.float64),
+        dims=("time", "lat", "lon"),
+        coords={"time": tempo, "lat": lat, "lon": lon},
+    )
+
+    assert agreg.municipios_mapeados(da) == set()
+
+
+def test_serie_de_municipio_retorna_datas_e_valores(tmp_path: Path) -> None:
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        datas, serie = agreg.serie_de_municipio(da, 9999999)
+    finally:
+        da.close()
+
+    assert isinstance(datas, np.ndarray)
+    assert isinstance(serie, np.ndarray)
+    assert datas.ndim == 1 and serie.ndim == 1
+    assert len(datas) == len(serie) == 3
+    np.testing.assert_array_equal(serie, np.array([1.0, 1.0, 1.0]))
+
+
+def test_serie_de_municipio_levanta_keyerror_para_municipio_ausente(tmp_path: Path) -> None:
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        with pytest.raises(KeyError, match="1234567"):
+            agreg.serie_de_municipio(da, 1234567)
+    finally:
+        da.close()
+
+
+def test_serie_de_municipio_reusa_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`municipios_mapeados` + `serie_de_municipio` na mesma grade só lê o
+    mapa célula→município uma única vez (em memória)."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        chamadas: list[int] = []
+        original = agreg._obter_mapa_celulas
+
+        def _spy(lat2d: np.ndarray, lon2d: np.ndarray) -> pd.DataFrame:
+            chamadas.append(1)
+            return original(lat2d, lon2d)
+
+        monkeypatch.setattr(agreg, "_obter_mapa_celulas", _spy)
+
+        municipios = sorted(agreg.municipios_mapeados(da))
+        for mun in municipios:
+            agreg.serie_de_municipio(da, mun)
+    finally:
+        da.close()
+
+    assert sum(chamadas) == 1

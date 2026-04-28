@@ -84,5 +84,57 @@ class AgregadorEspacial(Protocol):
             Múltiplas chamadas para a mesma grade produzem municípios
             **na mesma ordem**. Crítico para sincronização entre
             iteradores paralelos (pr/tas/evap) no pipeline.
+
+        Nota:
+            Para processar múltiplas variáveis simultaneamente, NÃO use
+            este método em paralelo. Grades distintas podem ter
+            coberturas municipais diferentes (ver Slice 22 / ADR-014),
+            causando dessincronização. Use :meth:`municipios_mapeados`
+            + :meth:`serie_de_municipio` em vez disso.
+        """
+        ...
+
+    def municipios_mapeados(self, dados: xr.DataArray) -> set[int]:
+        """Retorna o conjunto de municípios mapeados na grade de ``dados``.
+
+        Operação leve: não materializa séries diárias e reusa o cache do
+        mapeamento célula→município se já tiver sido construído para a
+        mesma grade. Usar para calcular interseção entre coberturas de
+        variáveis distintas antes de iterar (Slice 22 / ADR-014).
+
+        Args:
+            dados: DataArray com coordenadas ``lat``/``lon`` (mesmo
+                contrato de :meth:`agregar_por_municipio`).
+
+        Returns:
+            Conjunto de IDs IBGE como ``int``.
+        """
+        ...
+
+    def serie_de_municipio(
+        self,
+        dados: xr.DataArray,
+        municipio_id: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Retorna ``(datas, serie_diaria)`` para um único município.
+
+        Variante ponto-a-ponto de :meth:`iterar_por_municipio`. Permite
+        consumir municípios fora da ordem natural da grade — útil quando
+        o caller quer iterar pela interseção de várias grades (Slice 22).
+
+        Args:
+            dados: DataArray nos mesmos termos de
+                :meth:`agregar_por_municipio`.
+            municipio_id: código IBGE do município.
+
+        Returns:
+            Tupla ``(datas, serie_diaria)``:
+
+            - ``datas``: ``np.ndarray`` 1D ``datetime64`` com timestamps.
+            - ``serie_diaria``: ``np.ndarray`` 1D ``float64`` com a média
+              espacial das células do município por dia.
+
+        Raises:
+            KeyError: se ``municipio_id`` não estiver mapeado nesta grade.
         """
         ...

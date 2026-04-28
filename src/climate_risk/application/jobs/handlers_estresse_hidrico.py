@@ -1,4 +1,4 @@
-"""Handler de job do pipeline de estresse hídrico (Slice 15 / Slice 21).
+"""Handler de job do pipeline de estresse hídrico (Slice 15 / Slice 21 / Slice 22).
 
 Responsabilidade: consome um :class:`Job` ``processar_estresse_hidrico``,
 executa o pipeline completo (ler → agregar → calcular → persistir) e
@@ -8,9 +8,14 @@ Arquitetura: o handler é uma *closure* criada por :func:`criar_handler_estresse
 Todas as dependências (leitor, agregador, repositórios) são injetadas na
 fábrica; o CLI do worker monta o wiring.
 
-A partir da Slice 21 o pipeline é **streaming**: o agregador é consumido
-município a município via :meth:`AgregadorEspacial.iterar_por_municipio`
-e os resultados são persistidos em batches pequenos (``BATCH_SIZE``).
+A partir da Slice 21 o pipeline é **streaming**: resultados são persistidos
+em batches pequenos (``BATCH_SIZE``). A Slice 22 corrige a iteração entre
+variáveis: em vez de pareiar 3 iteradores de :meth:`iterar_por_municipio`
+(quebra quando as grades têm coberturas municipais distintas), o handler
+calcula a **interseção** dos municípios mapeados pelas 3 variáveis e itera
+apenas por essa interseção. Municípios divergentes são logados como
+warning estruturado. Ver ADR-014.
+
 Idempotência: cada execução começa apagando resultados parciais
 existentes (se houver) — assim retries não esbarram em ``UniqueConstraint``.
 Ver ADR-013.
@@ -236,25 +241,42 @@ async def _processar_streaming(
     cenario: str,
     params: ParametrosIndicesEstresseHidrico,
 ) -> _Totais:
-    """Núcleo streaming: itera 3 variáveis em paralelo e persiste em batches.
+    """Núcleo streaming: itera pela interseção das 3 grades e persiste em batches.
 
-    Levanta ``RuntimeError`` se as 3 iterações divergirem em ``municipio_id``
-    (sinal de não-determinismo no agregador, que quebraria o pareamento).
+    Slice 22 / ADR-014: as grades de pr/tas/evap podem cobrir conjuntos de
+    municípios distintos (modelos com bordas diferentes). Em vez de parear
+    iteradores paralelos (que dessincroniza), calculamos a interseção uma
+    única vez e iteramos por município chamando :meth:`serie_de_municipio`
+    em cada grade. Divergências são logadas com contagens e amostras.
     """
-    iter_pr = agregador.iterar_por_municipio(dados_pr)
-    iter_tas = agregador.iterar_por_municipio(dados_tas)
-    iter_evap = agregador.iterar_por_municipio(dados_evap)
+    municipios_pr = agregador.municipios_mapeados(dados_pr)
+    municipios_tas = agregador.municipios_mapeados(dados_tas)
+    municipios_evap = agregador.municipios_mapeados(dados_evap)
+
+    municipios_comuns = municipios_pr & municipios_tas & municipios_evap
+    _logar_municipios_divergentes(
+        execucao_id=execucao_id,
+        municipios_pr=municipios_pr,
+        municipios_tas=municipios_tas,
+        municipios_evap=municipios_evap,
+        municipios_comuns=municipios_comuns,
+    )
+
+    municipios_ordenados = sorted(municipios_comuns)
+    total_a_processar = len(municipios_ordenados)
 
     batch: list[ResultadoEstresseHidrico] = []
     totais = _Totais()
 
-    for tripla in _zip_iteradores(iter_pr, iter_tas, iter_evap):
-        (mun_pr, datas, serie_pr), (mun_tas, _, serie_tas), (mun_evap, _, serie_evap) = tripla
-        if not (mun_pr == mun_tas == mun_evap):
+    for municipio_id in municipios_ordenados:
+        datas, serie_pr = agregador.serie_de_municipio(dados_pr, municipio_id)
+        _, serie_tas = agregador.serie_de_municipio(dados_tas, municipio_id)
+        _, serie_evap = agregador.serie_de_municipio(dados_evap, municipio_id)
+
+        if not (len(serie_pr) == len(serie_tas) == len(serie_evap)):
             raise RuntimeError(
-                f"Inconsistência de iteração: pr={mun_pr}, tas={mun_tas}, "
-                f"evap={mun_evap}. Verificar determinismo da ordem em "
-                "AgregadorEspacial.iterar_por_municipio."
+                f"Séries de tamanhos diferentes para município {municipio_id}: "
+                f"pr={len(serie_pr)}, tas={len(serie_tas)}, evap={len(serie_evap)}"
             )
 
         for ano, indices_anuais in _calcular_por_ano(
@@ -268,7 +290,7 @@ async def _processar_streaming(
                 ResultadoEstresseHidrico(
                     id=gerar_id("reh"),
                     execucao_id=execucao_id,
-                    municipio_id=int(mun_pr),
+                    municipio_id=int(municipio_id),
                     ano=int(ano),
                     cenario=cenario,
                     frequencia_dias_secos_quentes=indices_anuais.dias_secos_quentes,
@@ -290,6 +312,7 @@ async def _processar_streaming(
                 extra={
                     "execucao_id": execucao_id,
                     "municipios_processados": totais.municipios,
+                    "total_municipios_a_processar": total_a_processar,
                     "resultados_persistidos": totais.resultados,
                 },
             )
@@ -301,19 +324,54 @@ async def _processar_streaming(
     return totais
 
 
-def _zip_iteradores(
-    iter_pr: Iterator[tuple[int, np.ndarray, np.ndarray]],
-    iter_tas: Iterator[tuple[int, np.ndarray, np.ndarray]],
-    iter_evap: Iterator[tuple[int, np.ndarray, np.ndarray]],
-) -> Iterator[
-    tuple[
-        tuple[int, np.ndarray, np.ndarray],
-        tuple[int, np.ndarray, np.ndarray],
-        tuple[int, np.ndarray, np.ndarray],
-    ]
-]:
-    """``zip`` tipado dos três iteradores. Para no primeiro a esgotar."""
-    yield from zip(iter_pr, iter_tas, iter_evap, strict=False)
+def _logar_municipios_divergentes(
+    *,
+    execucao_id: str,
+    municipios_pr: set[int],
+    municipios_tas: set[int],
+    municipios_evap: set[int],
+    municipios_comuns: set[int],
+) -> None:
+    """Emite warning estruturado quando as 3 grades divergem em cobertura."""
+    todos = municipios_pr | municipios_tas | municipios_evap
+    pulados = todos - municipios_comuns
+    if not pulados:
+        return
+
+    so_pr_tas = (municipios_pr & municipios_tas) - municipios_evap
+    so_pr_evap = (municipios_pr & municipios_evap) - municipios_tas
+    so_tas_evap = (municipios_tas & municipios_evap) - municipios_pr
+    so_pr = municipios_pr - municipios_tas - municipios_evap
+    so_tas = municipios_tas - municipios_pr - municipios_evap
+    so_evap = municipios_evap - municipios_pr - municipios_tas
+
+    logger.warning(
+        "Municípios divergentes entre grades; serão ignorados",
+        extra={
+            "execucao_id": execucao_id,
+            "total_pulados": len(pulados),
+            "total_processados": len(municipios_comuns),
+            "em_pr_tas_mas_nao_evap": {
+                "count": len(so_pr_tas),
+                "amostra": _amostra(so_pr_tas),
+            },
+            "em_pr_evap_mas_nao_tas": {
+                "count": len(so_pr_evap),
+                "amostra": _amostra(so_pr_evap),
+            },
+            "em_tas_evap_mas_nao_pr": {
+                "count": len(so_tas_evap),
+                "amostra": _amostra(so_tas_evap),
+            },
+            "so_em_pr": {"count": len(so_pr), "amostra": _amostra(so_pr)},
+            "so_em_tas": {"count": len(so_tas), "amostra": _amostra(so_tas)},
+            "so_em_evap": {"count": len(so_evap), "amostra": _amostra(so_evap)},
+        },
+    )
+
+
+def _amostra(conjunto: set[int], n: int = 10) -> list[int]:
+    return sorted(conjunto)[:n]
 
 
 def _calcular_por_ano(

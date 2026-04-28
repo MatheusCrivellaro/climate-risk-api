@@ -94,11 +94,11 @@ pending/running retoma o polling. Limite de 50 execuções no histórico.
 O agregador yield tuplas sob demanda
 (`AgregadorEspacial.iterar_por_municipio`), evitando construir o
 DataFrame completo em RAM. O handler de estresse hídrico
-(`application/jobs/handlers_estresse_hidrico.py`) consome os 3
-iteradores em paralelo (pr/tas/evap), calcula índices anuais município a
-município e persiste em batches de `BATCH_SIZE = 100`. Logs estruturados
-com `execucao_id`/`municipios_processados` saem a cada
-`LOG_INTERVALO = 100` municípios.
+(`application/jobs/handlers_estresse_hidrico.py`) calcula índices anuais
+município a município e persiste em batches de `BATCH_SIZE = 100`. Logs
+estruturados com `execucao_id`/`municipios_processados`/
+`total_municipios_a_processar` saem a cada `LOG_INTERVALO = 100`
+municípios.
 
 Idempotência: ao iniciar, `RepositorioResultadoEstresseHidrico.deletar_por_execucao`
 remove resultados parciais da execução. Suporta retry sem violar a
@@ -107,6 +107,21 @@ remove resultados parciais da execução. Suporta retry sem violar a
 O método legacy `agregar_por_municipio` permanece para compatibilidade
 com testes e callers existentes — não usar em datasets grandes (estoura
 memória, foi exatamente o motivo desta slice).
+
+### Interseção de cobertura municipal (Slice 22)
+
+As grades de pr, tas e evspsbl podem ter conjuntos diferentes de
+municípios mapeados (modelos climáticos com coberturas espaciais
+distintas, especialmente em bordas costeiras e fronteiras). A partir da
+Slice 22 o handler processa apenas a **interseção** dos 3 conjuntos.
+Municípios divergentes são logados como warning estruturado mostrando
+contagens e amostras por categoria (só em pr, só em tas, só em evap, em
+pr ∩ tas mas não em evap, etc.).
+
+Para iteração multi-variável use sempre `AgregadorEspacial.municipios_mapeados`
++ `AgregadorEspacial.serie_de_municipio`. **Nunca pareie iteradores de
+`iterar_por_municipio` para variáveis distintas** — quebra
+silenciosamente quando as coberturas divergem (ver ADR-014).
 
 ## Convenções
 
