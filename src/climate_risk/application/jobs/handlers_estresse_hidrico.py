@@ -281,9 +281,7 @@ async def _processar_streaming(
 
     iter_pr = agregador.iterar_por_municipio(dados_pr, municipios_alvo=municipios_comuns)
     iter_tas = agregador.iterar_por_municipio(dados_tas, municipios_alvo=municipios_comuns)
-    iter_evap = agregador.iterar_por_municipio(
-        dados_evap, municipios_alvo=municipios_comuns
-    )
+    iter_evap = agregador.iterar_por_municipio(dados_evap, municipios_alvo=municipios_comuns)
 
     batch: list[ResultadoEstresseHidrico] = []
     totais = _Totais()

@@ -337,9 +337,7 @@ def test_iterar_por_municipio_filtro_preserva_dados(tmp_path: Path) -> None:
         completo = {mun: serie for mun, _, serie in agreg.iterar_por_municipio(da)}
         filtrado = {
             mun: serie
-            for mun, _, serie in agreg.iterar_por_municipio(
-                da, municipios_alvo={9999999}
-            )
+            for mun, _, serie in agreg.iterar_por_municipio(da, municipios_alvo={9999999})
         }
     finally:
         da.close()

@@ -108,10 +108,7 @@ class _AgregadorFake:
             (variavel, set(municipios_alvo) if municipios_alvo is not None else None)
         )
         ids_mapeados = self.cobertura[variavel]
-        if municipios_alvo is not None:
-            ids = ids_mapeados & municipios_alvo
-        else:
-            ids = ids_mapeados
+        ids = ids_mapeados & municipios_alvo if municipios_alvo is not None else ids_mapeados
         for municipio_id in sorted(ids):
             yield municipio_id, self.datas.copy(), self._serie_constante(variavel)
 
