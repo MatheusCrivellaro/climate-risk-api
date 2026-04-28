@@ -1,4 +1,4 @@
-"""Handler de job do pipeline de estresse hídrico (Slice 15 / Slice 21 / Slice 22).
+"""Handler de job do pipeline de estresse hídrico (Slice 15 / 21 / 22 / 23).
 
 Responsabilidade: consome um :class:`Job` ``processar_estresse_hidrico``,
 executa o pipeline completo (ler → agregar → calcular → persistir) e
@@ -9,12 +9,20 @@ Todas as dependências (leitor, agregador, repositórios) são injetadas na
 fábrica; o CLI do worker monta o wiring.
 
 A partir da Slice 21 o pipeline é **streaming**: resultados são persistidos
-em batches pequenos (``BATCH_SIZE``). A Slice 22 corrige a iteração entre
-variáveis: em vez de pareiar 3 iteradores de :meth:`iterar_por_municipio`
-(quebra quando as grades têm coberturas municipais distintas), o handler
-calcula a **interseção** dos municípios mapeados pelas 3 variáveis e itera
-apenas por essa interseção. Municípios divergentes são logados como
-warning estruturado. Ver ADR-014.
+em batches pequenos (``BATCH_SIZE``).
+
+A Slice 22 corrigiu a divergência de cobertura municipal entre grades: o
+handler passou a calcular a **interseção** dos 3 conjuntos
+(:meth:`AgregadorEspacial.municipios_mapeados`) e logar warning
+estruturado das divergências.
+
+A Slice 23 (ADR-015) restaura a performance da Slice 21: em vez de chamar
+:meth:`AgregadorEspacial.serie_de_municipio` 3x por município (cada
+chamada dispara um ``compute`` dask), o handler usa
+:meth:`AgregadorEspacial.iterar_por_municipio` com
+``municipios_alvo=interseção`` para as 3 variáveis e consome com ``zip``.
+Como os 3 iteradores recebem o mesmo conjunto e percorrem em ordem
+ordenada, a sincronização é determinística.
 
 Idempotência: cada execução começa apagando resultados parciais
 existentes (se houver) — assim retries não esbarram em ``UniqueConstraint``.
@@ -244,10 +252,17 @@ async def _processar_streaming(
     """Núcleo streaming: itera pela interseção das 3 grades e persiste em batches.
 
     Slice 22 / ADR-014: as grades de pr/tas/evap podem cobrir conjuntos de
-    municípios distintos (modelos com bordas diferentes). Em vez de parear
-    iteradores paralelos (que dessincroniza), calculamos a interseção uma
-    única vez e iteramos por município chamando :meth:`serie_de_municipio`
-    em cada grade. Divergências são logadas com contagens e amostras.
+    municípios distintos (modelos com bordas diferentes). Calculamos a
+    interseção uma única vez e logamos as divergências como warning
+    estruturado.
+
+    Slice 23 / ADR-015: a iteração usa
+    :meth:`AgregadorEspacial.iterar_por_municipio` com
+    ``municipios_alvo=interseção`` para as 3 variáveis e consome com
+    ``zip``. Cada iterador percorre o mesmo conjunto em ordem ascendente,
+    garantindo sincronização determinística sem precisar chamar
+    :meth:`AgregadorEspacial.serie_de_municipio` por município (que perde
+    a localidade do streaming dask).
     """
     municipios_pr = agregador.municipios_mapeados(dados_pr)
     municipios_tas = agregador.municipios_mapeados(dados_tas)
@@ -262,20 +277,30 @@ async def _processar_streaming(
         municipios_comuns=municipios_comuns,
     )
 
-    municipios_ordenados = sorted(municipios_comuns)
-    total_a_processar = len(municipios_ordenados)
+    total_a_processar = len(municipios_comuns)
+
+    iter_pr = agregador.iterar_por_municipio(dados_pr, municipios_alvo=municipios_comuns)
+    iter_tas = agregador.iterar_por_municipio(dados_tas, municipios_alvo=municipios_comuns)
+    iter_evap = agregador.iterar_por_municipio(dados_evap, municipios_alvo=municipios_comuns)
 
     batch: list[ResultadoEstresseHidrico] = []
     totais = _Totais()
 
-    for municipio_id in municipios_ordenados:
-        datas, serie_pr = agregador.serie_de_municipio(dados_pr, municipio_id)
-        _, serie_tas = agregador.serie_de_municipio(dados_tas, municipio_id)
-        _, serie_evap = agregador.serie_de_municipio(dados_evap, municipio_id)
+    for (mun_pr, datas, serie_pr), (mun_tas, _, serie_tas), (mun_evap, _, serie_evap) in zip(
+        iter_pr, iter_tas, iter_evap, strict=True
+    ):
+        # Sanity check: deve sempre passar com filtro + ordem ascendente.
+        # Mantido para detectar bugs futuros em implementações alternativas.
+        if not (mun_pr == mun_tas == mun_evap):
+            raise RuntimeError(
+                f"Inconsistência de iteração com filtro: pr={mun_pr}, "
+                f"tas={mun_tas}, evap={mun_evap}. Verificar implementação "
+                f"de iterar_por_municipio com municipios_alvo."
+            )
 
         if not (len(serie_pr) == len(serie_tas) == len(serie_evap)):
             raise RuntimeError(
-                f"Séries de tamanhos diferentes para município {municipio_id}: "
+                f"Séries de tamanhos diferentes para município {mun_pr}: "
                 f"pr={len(serie_pr)}, tas={len(serie_tas)}, evap={len(serie_evap)}"
             )
 
@@ -290,7 +315,7 @@ async def _processar_streaming(
                 ResultadoEstresseHidrico(
                     id=gerar_id("reh"),
                     execucao_id=execucao_id,
-                    municipio_id=int(municipio_id),
+                    municipio_id=int(mun_pr),
                     ano=int(ano),
                     cenario=cenario,
                     frequencia_dias_secos_quentes=indices_anuais.dias_secos_quentes,
