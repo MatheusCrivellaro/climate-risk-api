@@ -1,0 +1,82 @@
+# cProfile — estrategia=slice_21
+# Top 30 funções por tempo cumulativo
+
+         21250293 function calls (20861809 primitive calls) in 19.446 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1122 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    31820    0.060    0.000   25.792    0.001 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/local.py:140(queue_get)
+    31820    0.251    0.000   24.605    0.001 /usr/lib/python3.12/queue.py:154(get)
+    31075    0.233    0.000   22.467    0.001 /usr/lib/python3.12/threading.py:323(wait)
+      2/1    0.001    0.000   19.435   19.435 /home/user/climate-risk-api/scripts/bench_iterar_municipios.py:257(estrategia_slice_21)
+  304/303    0.020    0.000   19.422    0.064 /home/user/climate-risk-api/scripts/bench_iterar_municipios.py:202(iterar_por_municipio)
+  301/300    0.009    0.000   19.148    0.064 /home/user/climate-risk-api/scripts/bench_iterar_municipios.py:180(_media_espacial)
+4518/3912    0.005    0.000   17.553    0.004 {built-in method numpy.asarray}
+  304/303    0.000    0.000   17.541    0.058 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/xarray/core/dataarray.py:790(values)
+      303    0.000    0.000   17.541    0.058 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/xarray/core/variable.py:552(values)
+      303    0.001    0.000   17.540    0.058 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/xarray/core/variable.py:321(_as_array_or_item)
+      300    0.001    0.000   17.537    0.058 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/core.py:1706(__array__)
+      300    0.020    0.000   17.525    0.058 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/base.py:353(compute)
+      300    0.005    0.000   17.505    0.058 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/base.py:601(compute)
+      300    0.009    0.000   17.120    0.057 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/threaded.py:62(get)
+      300    0.045    0.000   17.107    0.057 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/local.py:382(get_async)
+31820/8076    0.083    0.000   13.276    0.002 /usr/lib/python3.12/concurrent/futures/thread.py:53(run)
+31820/8076    0.039    0.000   13.042    0.002 {method 'run' of '_contextvars.Context' objects}
+31820/8076    0.051    0.000   13.034    0.002 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/local.py:266(batch_execute_tasks)
+31820/8076    0.108    0.000   13.022    0.002 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/local.py:246(execute_task)
+70540/4754    0.539    0.000   12.966    0.003 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:753(__call__)
+17260/3854    0.084    0.000    5.411    0.001 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:194(_execute_subgraph)
+17860/17851    0.766    0.000    4.721    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:81(order)
+17560/4154    0.396    0.000    4.366    0.001 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:1064(execute_graph)
+45303/40203    0.030    0.000    1.907    0.000 /usr/lib/python3.12/functools.py:979(__get__)
+      300    0.001    0.000    1.786    0.006 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_expr.py:1149(__dask_graph__)
+      300    0.002    0.000    1.767    0.006 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_expr.py:1133(_optimized_dsk)
+      300    0.011    0.000    1.733    0.006 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/optimization.py:37(optimize)
+14260/13337    0.030    0.000    1.438    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/chunk.py:287(astype)
+35720/35714    0.854    0.000    1.409    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:618(_connecting_to_roots)
+    31820    0.225    0.000    1.162    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/local.py:488(fire_tasks)
+
+
+
+# Top 30 funções por tempo total (self-time)
+
+         21250293 function calls (20861809 primitive calls) in 19.446 seconds
+
+   Ordered by: internal time
+   List reduced from 1122 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+14260/13987    0.913    0.000    0.929    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/core.py:6030(_vindex_slice_and_transpose)
+14595/697    0.891    0.000    0.041    0.000 {method 'get' of '_queue.SimpleQueue' objects}
+35720/35714    0.854    0.000    1.409    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:618(_connecting_to_roots)
+202539/156120    0.803    0.000    0.906    0.000 {method 'acquire' of '_thread.lock' objects}
+14260/4184    0.802    0.000    0.241    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/random.py:800(_apply_random_func)
+17860/17851    0.766    0.000    4.721    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:81(order)
+70540/4754    0.539    0.000   12.966    0.003 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:753(__call__)
+18761/17637    0.481    0.000    0.476    0.000 {method 'astype' of 'numpy.ndarray' objects}
+  1034120    0.399    0.000    0.628    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:1014(__getitem__)
+17560/4154    0.396    0.000    4.366    0.001 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:1064(execute_graph)
+2261129/2259920    0.351    0.000    0.396    0.000 {built-in method builtins.isinstance}
+    44580    0.340    0.000    0.496    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:226(add_to_result)
+    14260    0.315    0.000    0.356    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/numpy/_core/_ufunc_config.py:496(inner)
+    99960    0.309    0.000    0.412    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:209(sort_key)
+  1261467    0.255    0.000    0.255    0.000 {method 'get' of 'dict' objects}
+    31820    0.251    0.000   24.605    0.001 /usr/lib/python3.12/queue.py:154(get)
+    31075    0.233    0.000   22.467    0.001 /usr/lib/python3.12/threading.py:323(wait)
+1587763/1562618    0.233    0.000    0.242    0.000 {built-in method builtins.len}
+    31820    0.225    0.000    1.162    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/local.py:488(fire_tasks)
+17860/17858    0.208    0.000    0.480    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/order.py:705(ndependencies)
+  1068811    0.202    0.000    0.202    0.000 {method 'add' of 'set' objects}
+634592/634512    0.196    0.000    0.567    0.000 <frozen _collections_abc>:892(__iter__)
+     1500    0.191    0.000    0.204    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/core.py:6039(_vindex_merge)
+    19360    0.188    0.000    0.422    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/core.py:306(reverse_dict)
+    71140    0.180    0.000    0.255    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:647(__init__)
+  1012488    0.166    0.000    0.166    0.000 {method 'append' of 'list' objects}
+    44930    0.164    0.000    0.164    0.000 {method 'release' of '_thread.lock' objects}
+258760/237600    0.150    0.000    0.278    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:756(_eval)
+      300    0.148    0.000    0.462    0.002 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/array/core.py:5853(_vindex_array)
+    87800    0.148    0.000    0.175    0.000 /home/user/climate-risk-api/.venv/lib/python3.12/site-packages/dask/_task_spec.py:402(_verify_values)
+
+
