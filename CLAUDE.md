@@ -116,12 +116,26 @@ distintas, especialmente em bordas costeiras e fronteiras). A partir da
 Slice 22 o handler processa apenas a **interseção** dos 3 conjuntos.
 Municípios divergentes são logados como warning estruturado mostrando
 contagens e amostras por categoria (só em pr, só em tas, só em evap, em
-pr ∩ tas mas não em evap, etc.).
+pr ∩ tas mas não em evap, etc.). Ver ADR-014.
 
-Para iteração multi-variável use sempre `AgregadorEspacial.municipios_mapeados`
-+ `AgregadorEspacial.serie_de_municipio`. **Nunca pareie iteradores de
-`iterar_por_municipio` para variáveis distintas** — quebra
-silenciosamente quando as coberturas divergem (ver ADR-014).
+### Performance fix do iterador (Slice 23)
+
+O método `iterar_por_municipio` aceita parâmetro opcional
+`municipios_alvo: set[int] | None`. Quando fornecido, itera apenas por
+`mapa.keys() & municipios_alvo` em ordem ascendente, permitindo que o
+handler use `zip(iter_pr, iter_tas, iter_evap)` com filtro pela
+interseção das 3 grades. Restaura performance da Slice 21 (~3 computes
+dask em vez de O(N_municípios × 3)) sem perder a correção da Slice 22.
+Ver ADR-015.
+
+Para iteração multi-variável: calcule a interseção via
+`AgregadorEspacial.municipios_mapeados` para as 3 variáveis, passe o
+mesmo conjunto como `municipios_alvo` às 3 chamadas de
+`iterar_por_municipio` e consuma com `zip(strict=True)`. **Não** chame
+`serie_de_municipio` em loop por município — perde a localidade do
+streaming dask (foi exatamente o gargalo que motivou a Slice 23).
+`serie_de_municipio` permanece disponível para casos pontuais (debug,
+exportação ad-hoc), mas não para processamento em massa.
 
 ## Convenções
 
