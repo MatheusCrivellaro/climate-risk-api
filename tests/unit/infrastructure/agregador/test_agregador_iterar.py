@@ -265,3 +265,116 @@ def test_serie_de_municipio_reusa_cache(tmp_path: Path, monkeypatch: pytest.Monk
         da.close()
 
     assert sum(chamadas) == 1
+
+
+# ---------------------------------------------------------------------
+# Slice 23: iterar_por_municipio com filtro municipios_alvo
+# ---------------------------------------------------------------------
+
+
+def test_iterar_por_municipio_sem_filtro_yield_todos(tmp_path: Path) -> None:
+    """Backward-compat: chamada sem ``municipios_alvo`` igual à da Slice 21."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        ids_iterados = [mun for mun, _, _ in agreg.iterar_por_municipio(da)]
+        # Equivalente ao caminho explícito None.
+        ids_none = [mun for mun, _, _ in agreg.iterar_por_municipio(da, municipios_alvo=None)]
+    finally:
+        da.close()
+
+    assert ids_iterados == ids_none == [8888888, 9999999]
+
+
+def test_iterar_por_municipio_com_filtro_yield_apenas_intersecao(tmp_path: Path) -> None:
+    """Filtro inclui IDs fora do mapa: iteração entrega só interseção."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        # Mapa da grade tem {8888888, 9999999}; alvo inclui 8888888 e dois
+        # IDs fictícios fora da grade.
+        alvo = {8888888, 1234567, 9999998}
+        ids = [mun for mun, _, _ in agreg.iterar_por_municipio(da, municipios_alvo=alvo)]
+    finally:
+        da.close()
+
+    assert ids == [8888888]
+
+
+def test_iterar_por_municipio_com_filtro_vazio_yield_nada(tmp_path: Path) -> None:
+    """Filtro vazio nunca produz municípios, mesmo com mapa não-vazio."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        ids = list(agreg.iterar_por_municipio(da, municipios_alvo=set()))
+    finally:
+        da.close()
+
+    assert ids == []
+
+
+def test_iterar_por_municipio_filtro_ordem_determinista(tmp_path: Path) -> None:
+    """Mesma chamada filtrada 3x → mesma ordem ascendente. Precondição p/ ``zip``."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    alvo = {9999999, 8888888}
+    try:
+        ordem_1 = [mun for mun, _, _ in agreg.iterar_por_municipio(da, municipios_alvo=alvo)]
+        ordem_2 = [mun for mun, _, _ in agreg.iterar_por_municipio(da, municipios_alvo=alvo)]
+        ordem_3 = [mun for mun, _, _ in agreg.iterar_por_municipio(da, municipios_alvo=alvo)]
+    finally:
+        da.close()
+
+    assert ordem_1 == ordem_2 == ordem_3
+    assert ordem_1 == [8888888, 9999999]
+
+
+def test_iterar_por_municipio_filtro_preserva_dados(tmp_path: Path) -> None:
+    """Os valores yielded para um município filtrado batem com a iteração total."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        completo = {mun: serie for mun, _, serie in agreg.iterar_por_municipio(da)}
+        filtrado = {
+            mun: serie
+            for mun, _, serie in agreg.iterar_por_municipio(
+                da, municipios_alvo={9999999}
+            )
+        }
+    finally:
+        da.close()
+
+    assert set(filtrado.keys()) == {9999999}
+    np.testing.assert_array_equal(filtrado[9999999], completo[9999999])
+
+
+def test_iterar_3_grades_diferentes_sincronizam_com_intersecao(tmp_path: Path) -> None:
+    """Três grades com mapeamentos distintos, filtradas pela interseção, sincronizam via ``zip``."""
+    agreg = AgregadorMunicipiosGeopandas(SHAPEFILE, tmp_path)
+
+    # Construímos 3 grades sintéticas com cobertura distinta. A grade
+    # ``mun_sintetico.shp`` cobre ambos {8888888, 9999999}; para simular
+    # divergência, restringimos manualmente o ``municipios_alvo`` por
+    # variável (a iteração final deve usar a interseção).
+    da = xr.open_dataarray(GRADE_1D)
+    try:
+        municipios_pr = {8888888, 9999999}
+        municipios_tas = {8888888, 9999999}
+        # Simula evap "perdendo" o 8888888.
+        municipios_evap = {9999999}
+
+        intersecao = municipios_pr & municipios_tas & municipios_evap
+        assert intersecao == {9999999}
+
+        iter_pr = agreg.iterar_por_municipio(da, municipios_alvo=intersecao)
+        iter_tas = agreg.iterar_por_municipio(da, municipios_alvo=intersecao)
+        iter_evap = agreg.iterar_por_municipio(da, municipios_alvo=intersecao)
+
+        tuplas = list(zip(iter_pr, iter_tas, iter_evap, strict=True))
+    finally:
+        da.close()
+
+    # Deve haver exatamente 1 step pareando o município 9999999 nas 3.
+    assert len(tuplas) == 1
+    (mun_pr, _, _), (mun_tas, _, _), (mun_evap, _, _) = tuplas[0]
+    assert mun_pr == mun_tas == mun_evap == 9999999

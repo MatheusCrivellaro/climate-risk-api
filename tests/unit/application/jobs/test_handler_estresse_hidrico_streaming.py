@@ -430,3 +430,134 @@ async def test_handler_idempotente_apaga_parciais_antes_de_recomecar() -> None:
     # Valores recalculados — não os 999 do parcial.
     assert novo.frequencia_dias_secos_quentes == 2  # 2 dias secos quentes (todos)
     assert novo.intensidade_mm_dia == pytest.approx(2.0)  # déficit constante 2.0
+
+
+# ---------------------------------------------------------------------
+# Slice 23 / ADR-015: handler usa zip de iteradores filtrados
+# ---------------------------------------------------------------------
+
+
+def _construir_handler_e_agregador(
+    *,
+    n_municipios: int,
+    repo_resultados: _RepoResultadosFake,
+    repo_execucoes: _RepoExecucoesFake,
+    cobertura: dict[str, set[int]] | None = None,
+) -> tuple[Any, _AgregadorFake]:
+    datas = pd.date_range("2030-01-01", periods=2, freq="D").to_numpy()
+    leitor = _LeitorFake(pr=_da("pr"), tas=_da("tas"), evap=_da("evap"))
+    agregador: _AgregadorFake = (
+        _AgregadorFake(cobertura=cobertura, datas=datas)
+        if cobertura is not None
+        else _AgregadorFake.uniforme(n_municipios=n_municipios, datas=datas)
+    )
+    handler = criar_handler_estresse_hidrico(
+        leitor=leitor,  # type: ignore[arg-type]
+        agregador=agregador,
+        repositorio_execucoes=repo_execucoes,  # type: ignore[arg-type]
+        repositorio_resultados=repo_resultados,  # type: ignore[arg-type]
+    )
+    return handler, agregador
+
+
+@pytest.mark.asyncio
+async def test_handler_usa_iterar_por_municipio_filtrado_e_nao_serie_de_municipio() -> None:
+    """Handler chama iterar_por_municipio 3x (uma por variável) com municipios_alvo=interseção
+    e **não** chama serie_de_municipio em loop por município."""
+    repo_resultados = _RepoResultadosFake()
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_iter": _execucao("exec_iter")})
+    handler, agregador = _construir_handler_e_agregador(
+        n_municipios=0,
+        repo_resultados=repo_resultados,
+        repo_execucoes=repo_execucoes,
+        cobertura={"pr": {1, 2, 3}, "tas": {1, 2, 3}, "evap": {2, 3, 4}},
+    )
+
+    await handler(_payload("exec_iter"))
+
+    # Exatamente 3 chamadas a iterar_por_municipio, uma por variável.
+    variaveis_chamadas = [v for v, _ in agregador.chamadas_iterar]
+    assert sorted(variaveis_chamadas) == ["evap", "pr", "tas"]
+
+    # As 3 chamadas receberam o mesmo conjunto-alvo, igual à interseção.
+    alvos = [alvo for _, alvo in agregador.chamadas_iterar]
+    assert all(a == {2, 3} for a in alvos)
+
+    # No caminho normal (sem fallback de divergência), serie_de_municipio
+    # NÃO é chamado — perderia a localidade do streaming dask.
+    assert agregador.chamadas_serie_de_municipio == []
+
+
+@pytest.mark.asyncio
+async def test_handler_iteradores_sincronizados_via_zip() -> None:
+    """3 iteradores filtrados pela mesma interseção produzem o mesmo município
+    a cada step do zip; o handler conclui sem RuntimeError de inconsistência."""
+    repo_resultados = _RepoResultadosFake()
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_zip": _execucao("exec_zip")})
+    handler, _ = _construir_handler_e_agregador(
+        n_municipios=0,
+        repo_resultados=repo_resultados,
+        repo_execucoes=repo_execucoes,
+        cobertura={"pr": {1, 2, 3}, "tas": {1, 2, 3}, "evap": {2, 3, 4}},
+    )
+
+    await handler(_payload("exec_zip"))
+
+    municipios_persistidos = {r.municipio_id for r in repo_resultados.salvos}
+    assert municipios_persistidos == {2, 3}
+
+
+@pytest.mark.asyncio
+async def test_handler_levanta_erro_se_iteradores_dessincronizam_apesar_do_filtro() -> None:
+    """Simula bug futuro: o iterador de uma variável devolve municípios fora
+    da ordem ou ID divergente. Handler levanta RuntimeError descritivo."""
+
+    @dataclass
+    class _AgregadorDessincronizado:
+        cobertura: dict[str, set[int]]
+        datas: np.ndarray
+
+        def municipios_mapeados(self, dados: xr.DataArray) -> set[int]:
+            return set(self.cobertura[str(dados.name)])
+
+        def serie_de_municipio(
+            self, dados: xr.DataArray, municipio_id: int
+        ) -> tuple[np.ndarray, np.ndarray]:  # pragma: no cover
+            raise NotImplementedError
+
+        def iterar_por_municipio(
+            self,
+            dados: xr.DataArray,
+            *,
+            municipios_alvo: set[int] | None = None,
+        ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
+            nome = str(dados.name)
+            ids = sorted(self.cobertura[nome])
+            # Bug simulado: a variável "evap" quebra a ordem ascendente.
+            if nome == "evap":
+                ids = list(reversed(ids))
+            for mun in ids:
+                yield mun, self.datas.copy(), np.zeros_like(self.datas, dtype=np.float64)
+
+        def agregar_por_municipio(
+            self, dados: xr.DataArray, nome_variavel: str
+        ) -> pd.DataFrame:  # pragma: no cover
+            raise NotImplementedError
+
+    repo_resultados = _RepoResultadosFake()
+    repo_execucoes = _RepoExecucoesFake(execucoes={"exec_bug": _execucao("exec_bug")})
+
+    datas = pd.date_range("2030-01-01", periods=2, freq="D").to_numpy()
+    leitor = _LeitorFake(pr=_da("pr"), tas=_da("tas"), evap=_da("evap"))
+    agregador = _AgregadorDessincronizado(
+        cobertura={"pr": {1, 2}, "tas": {1, 2}, "evap": {1, 2}}, datas=datas
+    )
+    handler = criar_handler_estresse_hidrico(
+        leitor=leitor,  # type: ignore[arg-type]
+        agregador=agregador,  # type: ignore[arg-type]
+        repositorio_execucoes=repo_execucoes,  # type: ignore[arg-type]
+        repositorio_resultados=repo_resultados,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="Inconsistência de iteração com filtro"):
+        await handler(_payload("exec_bug"))
