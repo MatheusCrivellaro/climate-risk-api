@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from climate_risk.domain.entidades.resultado_estresse_hidrico import (
@@ -71,6 +71,15 @@ class SQLAlchemyRepositorioResultadoEstresseHidrico:
             return
         self._sessao.add_all([self._to_model(r) for r in lista])
         await self._sessao.commit()
+
+    async def deletar_por_execucao(self, execucao_id: str) -> int:
+        """Remove todos os resultados de uma execução. Idempotente."""
+        stmt = delete(ResultadoEstresseHidricoORM).where(
+            ResultadoEstresseHidricoORM.execucao_id == execucao_id
+        )
+        resultado = await self._sessao.execute(stmt)
+        await self._sessao.commit()
+        return int(getattr(resultado, "rowcount", 0) or 0)
 
     def _aplicar_filtros(
         self,

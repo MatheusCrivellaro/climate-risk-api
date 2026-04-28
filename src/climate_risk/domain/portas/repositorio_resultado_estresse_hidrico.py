@@ -62,3 +62,16 @@ class RepositorioResultadoEstresseHidrico(Protocol):
     ) -> int:
         """``COUNT(*)`` sob as mesmas condições de :meth:`listar`."""
         ...
+
+    async def deletar_por_execucao(self, execucao_id: str) -> int:
+        """Remove todos os resultados associados a ``execucao_id``.
+
+        Usado pelo pipeline de estresse hídrico (Slice 21) para garantir
+        idempotência: ao reprocessar uma execução, parciais de tentativas
+        anteriores são apagados antes de recomeçar para evitar violação de
+        ``UniqueConstraint(execucao_id, municipio_id, ano)``.
+
+        Returns:
+            Número de linhas afetadas.
+        """
+        ...

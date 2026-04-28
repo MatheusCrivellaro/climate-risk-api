@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import warnings
+from collections.abc import Iterator
 from pathlib import Path
 
 import geopandas as gpd
@@ -81,6 +82,56 @@ class AgregadorMunicipiosGeopandas:
         lat2d, lon2d = self._extrair_coordenadas_2d(dados)
         mapa = self._obter_mapa_celulas(lat2d, lon2d)
         return self._agregar_por_municipio_com_mapa(dados, nome_variavel, mapa)
+
+    def iterar_por_municipio(
+        self,
+        dados: xr.DataArray,
+    ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
+        """Streaming: yield ``(municipio_id, datas, serie_diaria)`` por município.
+
+        Diferente de :meth:`agregar_por_municipio`, **não** monta DataFrame
+        global. O caller é responsável por consumir as tuplas em ordem e
+        liberar a memória entre iterações. Ver Slice 21 / ADR-013.
+        """
+        lat2d, lon2d = self._extrair_coordenadas_2d(dados)
+        mapa = self._obter_mapa_celulas(lat2d, lon2d)
+        if mapa.empty:
+            return
+
+        spatial_dims = [d for d in dados.dims if d != "time"]
+        if len(spatial_dims) != 2:
+            raise ErroGradeDesconhecida(
+                f"DataArray precisa de 2 dimensões espaciais além de ``time``; "
+                f"recebeu {spatial_dims!r}."
+            )
+        dim_y, dim_x = spatial_dims
+
+        datas = pd.to_datetime(dados["time"].values).to_numpy()
+
+        # Sort para garantir ordem determinística entre múltiplas chamadas —
+        # iteradores paralelos (pr/tas/evap) precisam disso.
+        municipio_ids = sorted(mapa["municipio_id"].unique())
+
+        for municipio_id_str in municipio_ids:
+            grupo = mapa[mapa["municipio_id"] == municipio_id_str]
+            iy = np.asarray(grupo["iy"].to_numpy(), dtype=np.int64)
+            ix = np.asarray(grupo["ix"].to_numpy(), dtype=np.int64)
+
+            # Vectorized indexing: extrai apenas as células do município, sem
+            # carregar o DataArray inteiro para a RAM (importante quando
+            # ``dados`` é um xarray lazy / dask).
+            sub = dados.isel(
+                {
+                    dim_y: xr.DataArray(iy, dims="cell"),
+                    dim_x: xr.DataArray(ix, dims="cell"),
+                }
+            )
+            with warnings.catch_warnings():
+                # Coluna toda-NaN dispara aviso esperado — silencia.
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                serie = np.asarray(sub.mean(dim="cell", skipna=True).values)
+
+            yield int(municipio_id_str), datas, serie
 
     @staticmethod
     def _detectar_coluna_id_municipio(colunas: list[str]) -> str:
