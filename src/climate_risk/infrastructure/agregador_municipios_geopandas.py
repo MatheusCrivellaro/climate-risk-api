@@ -102,16 +102,19 @@ class AgregadorMunicipiosGeopandas:
         permitir iteração paralela de múltiplas variáveis (pr/tas/evap)
         com ``zip`` quando as grades têm coberturas distintas. Os 3
         iteradores recebem o mesmo conjunto (a interseção) e percorrem
-        em ordem ascendente, garantindo sincronização determinística sem
-        precisar chamar :meth:`serie_de_municipio` por município (que
-        força um ``compute`` dask separado por chamada).
+        em ordem ascendente, garantindo sincronização determinística.
+
+        Slice 25 / ADR-016: materialização única. ``dados.values`` é
+        chamado **uma vez** no início, virando array NumPy 2D
+        ``(n_tempo, n_celulas)``; depois a iteração usa NumPy puro, sem
+        novos ``compute`` dask por município. Isso elimina ~58 ms de
+        overhead de scheduler por município por variável que existia
+        nas Slices 21-23. Custo: ~180 MB por variável a cada 25 anos x
+        5000 células x float32 - folgado no orçamento de RAM do worker.
         """
         mapa = self._obter_mapa_para_dataarray(dados)
         if mapa.empty:
             return
-
-        dim_y, dim_x = self._dimensoes_espaciais(dados)
-        datas = pd.to_datetime(dados["time"].values).to_numpy()
 
         ids_mapeados = mapa["municipio_id"].unique()
         if municipios_alvo is not None:
@@ -123,11 +126,39 @@ class AgregadorMunicipiosGeopandas:
         # Sort para garantir ordem determinística entre múltiplas chamadas
         # (precondição para sincronizar iteradores via ``zip`` na Slice 23).
         municipio_ids = sorted(ids_para_iterar)
+        if not municipio_ids:
+            # Otimização: sem municípios para iterar, não materializa o array
+            # — evita compute dask custoso quando o filtro é vazio.
+            return
+
+        # CRÍTICO: materializa uma única vez. Compute dask único de toda a
+        # grade. Subsequente é NumPy puro (slicing + nanmean), sem dask.
+        valores = np.asarray(dados.values)
+        if valores.ndim != 3:
+            raise ErroGradeDesconhecida(
+                f"DataArray precisa de 3 dimensões (time, y, x); recebeu {valores.ndim}."
+            )
+        n_tempo, _, nx = valores.shape
+        valores_flat = valores.reshape(n_tempo, -1)
+
+        datas = pd.to_datetime(dados["time"].values).to_numpy()
+
+        # Pré-calcula índices flat por município (iy * nx + ix) — agrupar antes
+        # do loop evita filtragem repetida do DataFrame por id.
+        indices_por_municipio = {
+            municipio_id_str: (
+                grupo["iy"].to_numpy(dtype=np.int64) * nx + grupo["ix"].to_numpy(dtype=np.int64)
+            )
+            for municipio_id_str, grupo in mapa.groupby("municipio_id", sort=False)
+        }
 
         for municipio_id_str in municipio_ids:
-            grupo = mapa[mapa["municipio_id"] == municipio_id_str]
-            serie = self._media_espacial(dados, grupo, dim_y, dim_x)
-            yield int(municipio_id_str), datas, serie
+            indices_flat = indices_por_municipio[municipio_id_str]
+            sub = valores_flat[:, indices_flat]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                serie = np.nanmean(sub, axis=1)
+            yield int(municipio_id_str), datas, np.asarray(serie)
 
     def municipios_mapeados(self, dados: xr.DataArray) -> set[int]:
         """Conjunto de IDs IBGE mapeados na grade de ``dados``.
@@ -154,9 +185,10 @@ class AgregadorMunicipiosGeopandas:
 
         Nota: para processamento em massa de muitos municípios, **não**
         chamar este método em loop — cada chamada dispara um ``compute``
-        dask separado, perdendo a localidade do streaming. Use
-        :meth:`iterar_por_municipio` com ``municipios_alvo`` (Slice 23)
-        em vez disso.
+        dask separado para a grade inteira, sendo ``O(N_municípios)``
+        computes desnecessários. Use :meth:`iterar_por_municipio` com
+        ``municipios_alvo`` (Slice 23 / ADR-015) que materializa apenas
+        uma vez no total (Slice 25 / ADR-016).
         """
         mapa = self._obter_mapa_para_dataarray(dados)
         chave_str = str(municipio_id)
