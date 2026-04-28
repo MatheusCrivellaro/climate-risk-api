@@ -58,6 +58,8 @@ class AgregadorEspacial(Protocol):
     def iterar_por_municipio(
         self,
         dados: xr.DataArray,
+        *,
+        municipios_alvo: set[int] | None = None,
     ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
         """Yield ``(municipio_id, datas, serie_diaria)`` sob demanda.
 
@@ -69,6 +71,11 @@ class AgregadorEspacial(Protocol):
 
         Args:
             dados: mesmo contrato de :meth:`agregar_por_municipio`.
+            municipios_alvo: se fornecido (Slice 23), itera apenas pelos
+                municípios que estão **tanto** no mapeamento da grade
+                **quanto** neste conjunto. Se ``None`` (default), itera
+                por todos os municípios mapeados — comportamento da
+                Slice 21.
 
         Yields:
             Tuplas ``(municipio_id, datas, serie_diaria)``:
@@ -81,16 +88,18 @@ class AgregadorEspacial(Protocol):
               todas as células do município estão mascaradas no dia.
 
         Determinismo:
-            Múltiplas chamadas para a mesma grade produzem municípios
-            **na mesma ordem**. Crítico para sincronização entre
-            iteradores paralelos (pr/tas/evap) no pipeline.
+            Os IDs são yielded em **ordem ascendente** de ``municipio_id``.
+            Múltiplas chamadas com o mesmo ``municipios_alvo`` produzem
+            municípios na mesma ordem — precondição para sincronizar
+            iteradores paralelos (pr/tas/evap) via ``zip`` quando o
+            mesmo conjunto filtrado é passado às 3 chamadas.
 
-        Nota:
-            Para processar múltiplas variáveis simultaneamente, NÃO use
-            este método em paralelo. Grades distintas podem ter
-            coberturas municipais diferentes (ver Slice 22 / ADR-014),
-            causando dessincronização. Use :meth:`municipios_mapeados`
-            + :meth:`serie_de_municipio` em vez disso.
+        Uso recomendado para múltiplas variáveis (Slice 23):
+            Calcule a interseção via :meth:`municipios_mapeados` para as
+            3 variáveis, passe o mesmo conjunto como ``municipios_alvo``
+            às 3 chamadas e consuma com ``zip``. Isso preserva a
+            performance do streaming dask (1 ``compute`` por variável)
+            sem dessincronizar.
         """
         ...
 
@@ -119,8 +128,9 @@ class AgregadorEspacial(Protocol):
         """Retorna ``(datas, serie_diaria)`` para um único município.
 
         Variante ponto-a-ponto de :meth:`iterar_por_municipio`. Permite
-        consumir municípios fora da ordem natural da grade — útil quando
-        o caller quer iterar pela interseção de várias grades (Slice 22).
+        consumir municípios fora da ordem natural da grade — útil para
+        debug, exportação ad-hoc ou análise pontual de um município
+        específico.
 
         Args:
             dados: DataArray nos mesmos termos de
@@ -136,5 +146,13 @@ class AgregadorEspacial(Protocol):
 
         Raises:
             KeyError: se ``municipio_id`` não estiver mapeado nesta grade.
+
+        Nota:
+            Para processamento em massa de muitos municípios, **não**
+            chamar este método em loop — cada chamada dispara um
+            ``compute`` dask separado, perdendo a localidade do
+            streaming. Use :meth:`iterar_por_municipio` com
+            ``municipios_alvo`` (Slice 23 / ADR-015) que mantém a
+            performance.
         """
         ...

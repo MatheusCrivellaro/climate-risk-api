@@ -89,6 +89,8 @@ class AgregadorMunicipiosGeopandas:
     def iterar_por_municipio(
         self,
         dados: xr.DataArray,
+        *,
+        municipios_alvo: set[int] | None = None,
     ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
         """Streaming: yield ``(municipio_id, datas, serie_diaria)`` por município.
 
@@ -96,10 +98,13 @@ class AgregadorMunicipiosGeopandas:
         global. O caller é responsável por consumir as tuplas em ordem e
         liberar a memória entre iterações. Ver Slice 21 / ADR-013.
 
-        Nota: para processar múltiplas variáveis simultaneamente, NÃO use
-        este método em paralelo. As grades podem ter coberturas municipais
-        diferentes, causando dessincronização (Slice 22 / ADR-014). Use
-        :meth:`municipios_mapeados` + :meth:`serie_de_municipio` em vez disso.
+        Slice 23 / ADR-015: aceita filtro opcional ``municipios_alvo`` para
+        permitir iteração paralela de múltiplas variáveis (pr/tas/evap)
+        com ``zip`` quando as grades têm coberturas distintas. Os 3
+        iteradores recebem o mesmo conjunto (a interseção) e percorrem
+        em ordem ascendente, garantindo sincronização determinística sem
+        precisar chamar :meth:`serie_de_municipio` por município (que
+        força um ``compute`` dask separado por chamada).
         """
         mapa = self._obter_mapa_para_dataarray(dados)
         if mapa.empty:
@@ -108,8 +113,16 @@ class AgregadorMunicipiosGeopandas:
         dim_y, dim_x = self._dimensoes_espaciais(dados)
         datas = pd.to_datetime(dados["time"].values).to_numpy()
 
-        # Sort para garantir ordem determinística entre múltiplas chamadas.
-        municipio_ids = sorted(mapa["municipio_id"].unique())
+        ids_mapeados = mapa["municipio_id"].unique()
+        if municipios_alvo is not None:
+            alvo_str = {str(m) for m in municipios_alvo}
+            ids_para_iterar = [m for m in ids_mapeados if m in alvo_str]
+        else:
+            ids_para_iterar = list(ids_mapeados)
+
+        # Sort para garantir ordem determinística entre múltiplas chamadas
+        # (precondição para sincronizar iteradores via ``zip`` na Slice 23).
+        municipio_ids = sorted(ids_para_iterar)
 
         for municipio_id_str in municipio_ids:
             grupo = mapa[mapa["municipio_id"] == municipio_id_str]
@@ -138,6 +151,12 @@ class AgregadorMunicipiosGeopandas:
 
         Reusa o cache de mapeamento. Levanta :class:`KeyError` se o
         município não está coberto por nenhuma célula da grade.
+
+        Nota: para processamento em massa de muitos municípios, **não**
+        chamar este método em loop — cada chamada dispara um ``compute``
+        dask separado, perdendo a localidade do streaming. Use
+        :meth:`iterar_por_municipio` com ``municipios_alvo`` (Slice 23)
+        em vez disso.
         """
         mapa = self._obter_mapa_para_dataarray(dados)
         chave_str = str(municipio_id)
