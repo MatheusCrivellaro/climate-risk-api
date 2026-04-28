@@ -1,7 +1,28 @@
 # ADR-013 — Pipeline streaming + persistência incremental para estresse hídrico
 
-**Status:** Aceito.
+**Status:** Aceito (com correção — ver nota).
 **Data:** 2026-04-27.
+
+## Nota de correção (Slice 25 / ADR-016)
+
+A premissa original deste ADR — "o pipeline streaming faz 3 computes
+dask totais (um por variável)" — estava **incorreta**. O profiling
+investigativo da Slice 24 (ver `scripts/bench_iterar_municipios.py` e
+`tests/perf/profile_slice_23.txt`) revelou que a implementação fazia
+`N_municipios × 3` computes, com overhead de scheduler dask
+(~58 ms por chamada) dominando o tempo total — ~4,5 min só de overhead
+em produção (1557 municípios × 3 variáveis).
+
+A Slice 25 (ADR-016) corrigiu a implementação para **de fato** fazer
+apenas 3 computes (um por variável), via `np.asarray(dados.values)`
+único no início de `iterar_por_municipio` seguido de iteração com
+NumPy puro. Bench sintético: ~38× mais rápido.
+
+Os benefícios prometidos por este ADR continuam válidos: memória
+controlada, retry idempotente via `deletar_por_execucao`, batches de
+persistência (`BATCH_SIZE`), logs estruturados de progresso. O custo
+de RAM passou de "~50 MB durante iteração" para "~540 MB total" —
+ainda dentro do orçamento do worker.
 
 ## Contexto
 

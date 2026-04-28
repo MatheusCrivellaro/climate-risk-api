@@ -124,18 +124,30 @@ O método `iterar_por_municipio` aceita parâmetro opcional
 `municipios_alvo: set[int] | None`. Quando fornecido, itera apenas por
 `mapa.keys() & municipios_alvo` em ordem ascendente, permitindo que o
 handler use `zip(iter_pr, iter_tas, iter_evap)` com filtro pela
-interseção das 3 grades. Restaura performance da Slice 21 (~3 computes
-dask em vez de O(N_municípios × 3)) sem perder a correção da Slice 22.
-Ver ADR-015.
+interseção das 3 grades. Mantém a correção da Slice 22 e a ordem
+determinística para sincronização via `zip`. Ver ADR-015.
 
 Para iteração multi-variável: calcule a interseção via
 `AgregadorEspacial.municipios_mapeados` para as 3 variáveis, passe o
 mesmo conjunto como `municipios_alvo` às 3 chamadas de
 `iterar_por_municipio` e consuma com `zip(strict=True)`. **Não** chame
-`serie_de_municipio` em loop por município — perde a localidade do
-streaming dask (foi exatamente o gargalo que motivou a Slice 23).
+`serie_de_municipio` em loop por município — cada chamada dispara um
+compute dask para a grade inteira (`O(N)` computes desnecessários).
 `serie_de_municipio` permanece disponível para casos pontuais (debug,
 exportação ad-hoc), mas não para processamento em massa.
+
+### Performance do iterador (Slice 25)
+
+`iterar_por_municipio` materializa toda a grade com uma única chamada a
+`np.asarray(dados.values)` no início, depois itera por município com
+NumPy puro (`valores_flat[:, indices]` + `np.nanmean`). Isso elimina o
+overhead de ~58 ms × N_municípios × 3 vars que existia nas Slices 21-23
+(scheduler dask por chamada a `.values`/`.compute()` na sub-grade do
+município). Ver ADR-016 e a nota de correção do ADR-013.
+
+Pico de memória: ~540 MB para 25 anos × 5000 células × 3 vars (folgado
+em 1,6 GB de worker). Otimização: filtro `municipios_alvo` vazio retorna
+sem materializar (zero compute).
 
 ## Convenções
 
