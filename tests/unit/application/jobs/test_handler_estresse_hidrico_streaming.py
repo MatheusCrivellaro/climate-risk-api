@@ -1,13 +1,15 @@
-"""Testes do streaming do handler de estresse hídrico (Slice 21 / 22).
+"""Testes do streaming do handler de estresse hídrico (Slice 21 / 22 / 23).
 
 Foco em: idempotência (deletar parciais), batches, interseção de cobertura
-municipal entre as 3 grades (Slice 22 / ADR-014), logging estruturado,
-marcação final de execução.
+municipal entre as 3 grades (Slice 22 / ADR-014), iteração filtrada via
+``zip`` (Slice 23 / ADR-015), logging estruturado, marcação final de
+execução.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,15 +62,23 @@ class _LeitorFake:
 class _AgregadorFake:
     """Agregador fake com cobertura por variável configurável.
 
-    Slice 22: o handler agora calcula interseção das 3 grades em vez de
-    pareiar iteradores. Esta fake expõe :meth:`municipios_mapeados` e
-    :meth:`serie_de_municipio` por variável (``"pr"`` / ``"tas"`` / ``"evap"``).
-    Permite simular grades com coberturas distintas para testar o caminho
-    de divergência sem precisar do shapefile real.
+    Slice 22: o handler calcula interseção das 3 grades via
+    :meth:`municipios_mapeados`. Slice 23: a iteração propriamente dita
+    usa :meth:`iterar_por_municipio` com ``municipios_alvo=interseção``,
+    consumida via ``zip``. Esta fake expõe ambos por variável
+    (``"pr"`` / ``"tas"`` / ``"evap"``), permitindo simular grades com
+    coberturas distintas para testar o caminho de divergência sem
+    precisar do shapefile real.
+
+    Também registra as chamadas a :meth:`iterar_por_municipio` e
+    :meth:`serie_de_municipio` para os testes verificarem que o handler
+    usa o iterador filtrado e **não** chama ``serie_de_municipio`` em loop.
     """
 
     cobertura: dict[str, set[int]]
     datas: np.ndarray
+    chamadas_iterar: list[tuple[str, set[int] | None]] = field(default_factory=list)
+    chamadas_serie_de_municipio: list[tuple[str, int]] = field(default_factory=list)
 
     @classmethod
     def uniforme(cls, n_municipios: int, datas: np.ndarray) -> _AgregadorFake:
@@ -82,12 +92,28 @@ class _AgregadorFake:
         self, dados: xr.DataArray, municipio_id: int
     ) -> tuple[np.ndarray, np.ndarray]:
         variavel = self._variavel(dados)
+        self.chamadas_serie_de_municipio.append((variavel, municipio_id))
         if municipio_id not in self.cobertura[variavel]:
             raise KeyError(f"Município {municipio_id} fora da grade {variavel}")
         return self.datas.copy(), self._serie_constante(variavel)
 
-    def iterar_por_municipio(self, dados: xr.DataArray) -> Any:  # pragma: no cover
-        raise NotImplementedError("Slice 22 não usa iterar_por_municipio no handler.")
+    def iterar_por_municipio(
+        self,
+        dados: xr.DataArray,
+        *,
+        municipios_alvo: set[int] | None = None,
+    ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
+        variavel = self._variavel(dados)
+        self.chamadas_iterar.append(
+            (variavel, set(municipios_alvo) if municipios_alvo is not None else None)
+        )
+        ids_mapeados = self.cobertura[variavel]
+        if municipios_alvo is not None:
+            ids = ids_mapeados & municipios_alvo
+        else:
+            ids = ids_mapeados
+        for municipio_id in sorted(ids):
+            yield municipio_id, self.datas.copy(), self._serie_constante(variavel)
 
     def agregar_por_municipio(
         self, dados: xr.DataArray, nome_variavel: str

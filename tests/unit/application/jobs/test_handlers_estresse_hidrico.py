@@ -45,8 +45,9 @@ class _LeitorFake:
 class _AgregadorFake:
     """Séries municipais canned. A chave é o ``name`` do DataArray.
 
-    Slice 22: expõe `municipios_mapeados` e `serie_de_municipio` que o
-    handler usa para iterar pela interseção das 3 grades.
+    Slice 22: expõe `municipios_mapeados` para o handler calcular a
+    interseção. Slice 23: `iterar_por_municipio` aceita
+    ``municipios_alvo`` e itera pelo filtro em ordem ascendente de ID.
     """
 
     series_por_variavel: dict[str, list[tuple[int, np.ndarray, np.ndarray]]]
@@ -65,10 +66,17 @@ class _AgregadorFake:
         raise KeyError(f"Município {municipio_id} ausente da grade {nome!r}")
 
     def iterar_por_municipio(
-        self, dados: xr.DataArray
+        self,
+        dados: xr.DataArray,
+        *,
+        municipios_alvo: set[int] | None = None,
     ) -> Iterator[tuple[int, np.ndarray, np.ndarray]]:
-        nome = dados.name or ""
-        return iter(self.series_por_variavel[str(nome)])
+        nome = str(dados.name or "")
+        series = list(self.series_por_variavel[nome])
+        if municipios_alvo is not None:
+            series = [(mun, datas, serie) for mun, datas, serie in series if mun in municipios_alvo]
+        series.sort(key=lambda t: t[0])
+        return iter(series)
 
     def agregar_por_municipio(self, dados: xr.DataArray, nome_variavel: str) -> pd.DataFrame:
         raise NotImplementedError("Pipeline streaming (Slice 21) não usa agregar_por_municipio.")
