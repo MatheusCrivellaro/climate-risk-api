@@ -55,6 +55,10 @@ class AgregadorMunicipiosGeopandas:
             )
         cache_dir.mkdir(parents=True, exist_ok=True)
         self._cache_dir = cache_dir
+        # Cache em memória para evitar reler parquet em chamadas consecutivas
+        # com a mesma grade — o pipeline de estresse hídrico (Slice 22)
+        # consulta a mesma grade 2x (`municipios_mapeados` + `serie_de_municipio`).
+        self._cache_memoria: dict[str, pd.DataFrame] = {}
 
         gdf = gpd.read_file(str(shapefile_municipios))
         if gdf.crs is None:
@@ -79,8 +83,7 @@ class AgregadorMunicipiosGeopandas:
         dados: xr.DataArray,
         nome_variavel: str,
     ) -> pd.DataFrame:
-        lat2d, lon2d = self._extrair_coordenadas_2d(dados)
-        mapa = self._obter_mapa_celulas(lat2d, lon2d)
+        mapa = self._obter_mapa_para_dataarray(dados)
         return self._agregar_por_municipio_com_mapa(dados, nome_variavel, mapa)
 
     def iterar_por_municipio(
@@ -92,46 +95,102 @@ class AgregadorMunicipiosGeopandas:
         Diferente de :meth:`agregar_por_municipio`, **não** monta DataFrame
         global. O caller é responsável por consumir as tuplas em ordem e
         liberar a memória entre iterações. Ver Slice 21 / ADR-013.
+
+        Nota: para processar múltiplas variáveis simultaneamente, NÃO use
+        este método em paralelo. As grades podem ter coberturas municipais
+        diferentes, causando dessincronização (Slice 22 / ADR-014). Use
+        :meth:`municipios_mapeados` + :meth:`serie_de_municipio` em vez disso.
         """
-        lat2d, lon2d = self._extrair_coordenadas_2d(dados)
-        mapa = self._obter_mapa_celulas(lat2d, lon2d)
+        mapa = self._obter_mapa_para_dataarray(dados)
         if mapa.empty:
             return
 
+        dim_y, dim_x = self._dimensoes_espaciais(dados)
+        datas = pd.to_datetime(dados["time"].values).to_numpy()
+
+        # Sort para garantir ordem determinística entre múltiplas chamadas.
+        municipio_ids = sorted(mapa["municipio_id"].unique())
+
+        for municipio_id_str in municipio_ids:
+            grupo = mapa[mapa["municipio_id"] == municipio_id_str]
+            serie = self._media_espacial(dados, grupo, dim_y, dim_x)
+            yield int(municipio_id_str), datas, serie
+
+    def municipios_mapeados(self, dados: xr.DataArray) -> set[int]:
+        """Conjunto de IDs IBGE mapeados na grade de ``dados``.
+
+        Operação leve: reusa o cache de mapeamento célula→município sem
+        materializar séries diárias. Usado pelo pipeline de estresse
+        hídrico (Slice 22) para calcular interseção entre as 3 variáveis
+        antes de iterar.
+        """
+        mapa = self._obter_mapa_para_dataarray(dados)
+        if mapa.empty:
+            return set()
+        return {int(municipio_id) for municipio_id in mapa["municipio_id"].unique()}
+
+    def serie_de_municipio(
+        self,
+        dados: xr.DataArray,
+        municipio_id: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Retorna ``(datas, serie_diaria)`` para um município específico.
+
+        Reusa o cache de mapeamento. Levanta :class:`KeyError` se o
+        município não está coberto por nenhuma célula da grade.
+        """
+        mapa = self._obter_mapa_para_dataarray(dados)
+        chave_str = str(municipio_id)
+        grupo = mapa[mapa["municipio_id"] == chave_str]
+        if grupo.empty:
+            raise KeyError(f"Município {municipio_id} não está mapeado nesta grade")
+
+        dim_y, dim_x = self._dimensoes_espaciais(dados)
+        datas = pd.to_datetime(dados["time"].values).to_numpy()
+        serie = self._media_espacial(dados, grupo, dim_y, dim_x)
+        return datas, serie
+
+    @staticmethod
+    def _dimensoes_espaciais(dados: xr.DataArray) -> tuple[str, str]:
         spatial_dims = [d for d in dados.dims if d != "time"]
         if len(spatial_dims) != 2:
             raise ErroGradeDesconhecida(
                 f"DataArray precisa de 2 dimensões espaciais além de ``time``; "
                 f"recebeu {spatial_dims!r}."
             )
-        dim_y, dim_x = spatial_dims
+        return str(spatial_dims[0]), str(spatial_dims[1])
 
-        datas = pd.to_datetime(dados["time"].values).to_numpy()
+    @staticmethod
+    def _media_espacial(
+        dados: xr.DataArray,
+        grupo: pd.DataFrame,
+        dim_y: str,
+        dim_x: str,
+    ) -> np.ndarray:
+        iy = np.asarray(grupo["iy"].to_numpy(), dtype=np.int64)
+        ix = np.asarray(grupo["ix"].to_numpy(), dtype=np.int64)
+        # Vectorized indexing: extrai apenas as células do município, sem
+        # carregar o DataArray inteiro para a RAM (importante quando
+        # ``dados`` é um xarray lazy / dask).
+        sub = dados.isel(
+            {
+                dim_y: xr.DataArray(iy, dims="cell"),
+                dim_x: xr.DataArray(ix, dims="cell"),
+            }
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            return np.asarray(sub.mean(dim="cell", skipna=True).values)
 
-        # Sort para garantir ordem determinística entre múltiplas chamadas —
-        # iteradores paralelos (pr/tas/evap) precisam disso.
-        municipio_ids = sorted(mapa["municipio_id"].unique())
-
-        for municipio_id_str in municipio_ids:
-            grupo = mapa[mapa["municipio_id"] == municipio_id_str]
-            iy = np.asarray(grupo["iy"].to_numpy(), dtype=np.int64)
-            ix = np.asarray(grupo["ix"].to_numpy(), dtype=np.int64)
-
-            # Vectorized indexing: extrai apenas as células do município, sem
-            # carregar o DataArray inteiro para a RAM (importante quando
-            # ``dados`` é um xarray lazy / dask).
-            sub = dados.isel(
-                {
-                    dim_y: xr.DataArray(iy, dims="cell"),
-                    dim_x: xr.DataArray(ix, dims="cell"),
-                }
-            )
-            with warnings.catch_warnings():
-                # Coluna toda-NaN dispara aviso esperado — silencia.
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                serie = np.asarray(sub.mean(dim="cell", skipna=True).values)
-
-            yield int(municipio_id_str), datas, serie
+    def _obter_mapa_para_dataarray(self, dados: xr.DataArray) -> pd.DataFrame:
+        """Recupera mapa célula→município com cache em memória por grade."""
+        lat2d, lon2d = self._extrair_coordenadas_2d(dados)
+        chave = self._hash_grade(lat2d, lon2d)
+        if chave in self._cache_memoria:
+            return self._cache_memoria[chave]
+        mapa = self._obter_mapa_celulas(lat2d, lon2d)
+        self._cache_memoria[chave] = mapa
+        return mapa
 
     @staticmethod
     def _detectar_coluna_id_municipio(colunas: list[str]) -> str:
